@@ -5,6 +5,17 @@ from backend.llm.structured import (
     parse_and_validate_json,
     extract_with_self_healing,
 )
+from backend.llm.errors import (
+    LLMError,
+    LLMConnectionError,
+    LLMAuthenticationError,
+    LLMRateLimitError,
+    LLMResponseError,
+    LLMEmptyResponseError,
+    LLMValidationError,
+    LLMContextLengthExceededError,
+    LLMConfigurationError,
+)
 
 __all__ = [
     "LLMProvider",
@@ -12,4 +23,13 @@ __all__ = [
     "strip_markdown_fences",
     "parse_and_validate_json",
     "extract_with_self_healing",
+    "LLMError",
+    "LLMConnectionError",
+    "LLMAuthenticationError",
+    "LLMRateLimitError",
+    "LLMResponseError",
+    "LLMEmptyResponseError",
+    "LLMValidationError",
+    "LLMContextLengthExceededError",
+    "LLMConfigurationError",
 ]

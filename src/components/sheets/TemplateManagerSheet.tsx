@@ -256,10 +256,10 @@ export const TemplateManagerSheet: React.FC<TemplateManagerSheetProps> = ({
               return (
                 <div
                   key={tpl.id}
-                  className={`p-3.5 rounded-[12px] border transition-all ${
+                  className={`p-3.5 rounded-[12px] transition-all ${
                     isSelected
-                      ? 'border-[var(--accent)] bg-[var(--surface-solid)]'
-                      : 'border-[var(--separator)] bg-[var(--surface-subtle)]'
+                      ? 'border border-[var(--accent)] bg-[var(--surface-solid)]'
+                      : 'bg-[var(--surface-subtle)]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">

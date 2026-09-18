@@ -135,7 +135,7 @@ export const LaneMappingSheet: React.FC<LaneMappingSheetProps> = ({
                 return (
                   <div
                     key={actor}
-                    className="p-3 bg-[var(--surface-subtle)] rounded-[12px] border border-[var(--separator)] space-y-2"
+                    className="p-3 bg-[var(--surface-subtle)] rounded-[12px] space-y-2"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-[13px] font-semibold text-[var(--text)]">

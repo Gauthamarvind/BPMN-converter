@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint:design": "node scripts/lint-design.mjs",
+    "lint": "node scripts/lint-design.mjs && tsc --noEmit",
+    "build": "node scripts/lint-design.mjs && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

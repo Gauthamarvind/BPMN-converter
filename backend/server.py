@@ -35,6 +35,7 @@ from backend.pipeline.validator import ProcessValidator
 from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.linter import ProfileLinter
+from backend.pipeline.process_pipeline import process_pipeline
 from backend.cli import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
 from backend.templates.doc_parser import DocTemplateParser
@@ -247,186 +248,6 @@ def download_blank_template(type: str = "xlsx", sample: bool = True):
     )
 
 
-def process_pipeline(
-    raw_content: bytes,
-    filename: str,
-    profile_name: str = "generic",
-    mock: bool = False,
-    provider_name: Optional[str] = None,
-    model: Optional[str] = None,
-    base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
-    template_id: Optional[str] = None,
-    lane_map: Optional[Dict[str, str]] = None
-) -> Dict[str, Any]:
-    """Core conversion pipeline."""
-    title = Path(filename).stem.replace("_", " ").title()
-    ext = Path(filename).suffix.lower()
-
-    # 1. Pipeline Hook: Check if file is a structured document template
-    ir: Optional[ProcessIR] = None
-    extraction_meta = {"mode": "llm", "tokens_used": 0}
-
-    if ext in (".xlsx", ".csv", ".docx", ".json"):
-        try:
-            doc_parser = DocTemplateParser()
-            ir = doc_parser.parse_bytes(raw_content, filename)
-            extraction_meta["mode"] = "doc_template_parser"
-        except Exception as doc_ex:
-            print(f"[Process2BPMN Server] Doc parser fallback: {doc_ex}", file=sys.stderr)
-            ir = None
-
-    # 2. Ingestion & Process Extraction (LLM or Rule-based Mock)
-    doc = None
-    if ir is None:
-        doc = ingest_file(raw_content, filename)
-        if not mock:
-            try:
-                prov = get_llm_provider(
-                    provider_name=provider_name or config.llm.provider,
-                    base_url=base_url or config.llm.base_url,
-                    api_key=api_key or config.llm.api_key,
-                    model=model or config.llm.model
-                )
-                extractor = ProcessExtractor(provider=prov)
-                ir, usage = extractor.extract(doc.normalized_text, title=title)
-                extraction_meta["tokens_used"] = usage.get("total_tokens", 0)
-            except Exception as ex:
-                print(f"[Process2BPMN Server] Extraction fallback triggered: {ex}", file=sys.stderr)
-                ir = None
-
-        if ir is None:
-            ir = generate_mock_ir_from_text(doc.normalized_text, title=title)
-            extraction_meta["mode"] = "deterministic_rule_engine"
-
-    # 3. Deterministic Validation & Repair
-    validator = ProcessValidator(ir)
-    repaired_ir, raw_issues = validator.validate_and_repair()
-    issues = [
-        {
-            "severity": iss.severity,
-            "message": iss.message,
-            "element_id": iss.element_id,
-            "auto_fixed": iss.auto_fixed,
-            "details": iss.details
-        }
-        for iss in raw_issues
-    ]
-
-    # 4. Pipeline Hook: Apply Reference BPMN Template if requested
-    template_spec = None
-    template_raw_xml = None
-    template_info = None
-
-    if template_id:
-        record = template_storage.get_template(template_id)
-        if record:
-            meta, template_raw_xml, template_spec = record
-            if not lane_map:
-                actors = [l.name for p in repaired_ir.pools for l in p.lanes]
-                mapper = LaneMapper(template_spec)
-                mapping_res = mapper.map_actors(actors, use_llm=not mock)
-                lane_map = {m.actor: m.lane_id for m in mapping_res if m.lane_id}
-
-            repaired_ir.templateBindings = TemplateBindings(
-                templateId=template_id,
-                laneMap=lane_map or {}
-            )
-            if template_spec.source_vendor in ("signavio", "camunda", "aris", "celonis"):
-                profile_name = template_spec.source_vendor
-
-            template_info = {
-                "template_id": template_id,
-                "name": meta.name,
-                "source_vendor": template_spec.source_vendor,
-                "lane_map": lane_map or {}
-            }
-
-    # 5. Profile Linter
-    lint_res = linter.lint(repaired_ir, profile_name=profile_name)
-    lint_dict = {
-        "profile_name": lint_res.profile_name,
-        "display_name": lint_res.display_name,
-        "is_valid": lint_res.is_valid,
-        "assumptions": lint_res.assumptions,
-        "warnings": [
-            {"code": w.code, "message": w.message, "severity": w.severity, "element_id": w.element_id}
-            for w in lint_res.warnings
-        ]
-    }
-
-    # 6. Sugiyama Auto-Layout Engine (passes optional template constraints)
-    layout_engine = SugiyamaLayoutEngine(repaired_ir, template_spec=template_spec)
-    layout = layout_engine.compute_layout()
-
-    # 7. BPMN 2.0 XML Serialization (TemplateRenderer or standard Serializer)
-    profile_config = linter.load_profile(profile_name)
-    if template_spec and template_raw_xml:
-        renderer = BpmnTemplateRenderer(
-            template_raw_xml=template_raw_xml,
-            spec=template_spec,
-            ir=repaired_ir,
-            layout=layout,
-            profile_config=profile_config
-        )
-        bpmn_xml = renderer.render()
-    else:
-        serializer = BpmnXmlSerializer(repaired_ir, layout, profile_config)
-        bpmn_xml = serializer.serialize()
-
-    # 8. Multi-Profile Bulk Export Generation (Pre-render BPMN XML for all supported profiles)
-    supported_profiles = ["generic", "camunda", "signavio", "celonis", "aris"]
-    bpmn_by_profile: Dict[str, str] = {}
-    for p_name in supported_profiles:
-        if p_name == profile_name:
-            bpmn_by_profile[p_name] = bpmn_xml
-        else:
-            try:
-                p_cfg = linter.load_profile(p_name)
-                if template_spec and template_raw_xml:
-                    p_renderer = BpmnTemplateRenderer(
-                        template_raw_xml=template_raw_xml,
-                        spec=template_spec,
-                        ir=repaired_ir,
-                        layout=layout,
-                        profile_config=p_cfg
-                    )
-                    bpmn_by_profile[p_name] = p_renderer.render()
-                else:
-                    p_serializer = BpmnXmlSerializer(repaired_ir, layout, p_cfg)
-                    bpmn_by_profile[p_name] = p_serializer.serialize()
-            except Exception as e:
-                # Fallback to base BPMN XML if custom profile render encounters issue
-                bpmn_by_profile[p_name] = bpmn_xml
-
-    bulk_export = {
-        "process_name": repaired_ir.name or Path(filename).stem,
-        "supported_profiles": supported_profiles,
-        "bpmn_by_profile": bpmn_by_profile,
-        "available_formats": [".bpmn", ".svg", ".png"]
-    }
-
-    return {
-        "success": True,
-        "bpmn_xml": bpmn_xml,
-        "ir": repaired_ir.to_dict(),
-        "validation_issues": issues,
-        "lint_result": lint_dict,
-        "template_info": template_info,
-        "bulk_export": bulk_export,
-        "metadata": {
-            "filename": filename,
-            "process_name": repaired_ir.name,
-            "element_count": len(repaired_ir.elements),
-            "flow_count": len(repaired_ir.flows),
-            "pool_count": len(repaired_ir.pools),
-            "lane_count": sum(len(p.lanes) for p in repaired_ir.pools),
-            "extraction": extraction_meta
-        },
-        "normalized_text": doc.normalized_text if doc else ""
-    }
-
-
 MAX_UPLOAD_SIZE_BYTES = int(os.environ.get("MAX_UPLOAD_SIZE_BYTES", 20 * 1024 * 1024))
 
 
@@ -549,7 +370,7 @@ def lint_process(req: LintRequest):
 
 @app.post("/api/export/bulk")
 def export_bulk_zip(data: Dict[str, Any]):
-    """Accepts process_name, bpmn_by_profile, svg, png and generates a downloadable ZIP bundle."""
+    """Accepts process_name, optional ir, optional bpmn_by_profile, svg, png and generates a downloadable ZIP bundle with on-demand multi-profile serialization."""
     try:
         import io
         import zipfile
@@ -557,9 +378,45 @@ def export_bulk_zip(data: Dict[str, Any]):
 
         process_name = data.get("process_name", "process")
         safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', process_name).lower()
-        bpmn_by_profile = data.get("bpmn_by_profile", {})
+        bpmn_by_profile = dict(data.get("bpmn_by_profile") or {})
         svg_content = data.get("svg")
         png_base64 = data.get("png_base64")
+        ir_data = data.get("ir")
+        template_id = data.get("template_id")
+
+        supported_profiles = ["generic", "camunda", "signavio", "celonis", "aris"]
+
+        # If profiles not all present and IR is provided, re-serialize server-side on-demand
+        if ir_data:
+            try:
+                ir_obj = ProcessIR.from_dict(ir_data)
+                template_spec = None
+                template_raw_xml = None
+                if template_id:
+                    record = template_storage.get_template(template_id)
+                    if record:
+                        _, template_raw_xml, template_spec = record
+
+                layout_engine = SugiyamaLayoutEngine(ir_obj, template_spec=template_spec)
+                layout = layout_engine.compute_layout()
+
+                for p_name in supported_profiles:
+                    if p_name not in bpmn_by_profile:
+                        p_cfg = linter.load_profile(p_name)
+                        if template_spec and template_raw_xml:
+                            p_renderer = BpmnTemplateRenderer(
+                                template_raw_xml=template_raw_xml,
+                                spec=template_spec,
+                                ir=ir_obj,
+                                layout=layout,
+                                profile_config=p_cfg
+                            )
+                            bpmn_by_profile[p_name] = p_renderer.render()
+                        else:
+                            p_serializer = BpmnXmlSerializer(ir_obj, layout, p_cfg)
+                            bpmn_by_profile[p_name] = p_serializer.serialize()
+            except Exception as ser_ex:
+                print(f"[Process2BPMN Bulk Export] Error re-serializing profiles: {ser_ex}", file=sys.stderr)
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -580,7 +437,7 @@ def export_bulk_zip(data: Dict[str, Any]):
                 zf.writestr(f"{safe_name}.png", png_bytes)
 
             # Write README manifest
-            readme = f"""Text2BPMN Complete Process Package
+            readme = f"""Process2BPMN Complete Process Package
 ===================================
 Process Name: {process_name}
 Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}

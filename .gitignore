@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+dist/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Environment secrets
+.env
+.env.local
+
+# Dynamic templates
+data/templates/tpl_*

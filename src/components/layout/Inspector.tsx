@@ -27,6 +27,7 @@ export interface InspectorProps {
   lintResult?: LintResult;
   sourceText: string;
   onSelectElementById?: (id: string) => void;
+  isBottomSheet?: boolean;
 }
 
 export const Inspector: React.FC<InspectorProps> = ({
@@ -40,6 +41,7 @@ export const Inspector: React.FC<InspectorProps> = ({
   lintResult,
   sourceText,
   onSelectElementById,
+  isBottomSheet = false,
 }) => {
   const highlightRef = useRef<HTMLDivElement>(null);
 
@@ -81,40 +83,35 @@ export const Inspector: React.FC<InspectorProps> = ({
       )
     : -1;
 
-  return (
-    <motion.aside
-      initial={{ x: 360, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 360, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="w-[360px] h-full bg-[var(--surface-solid)] border-l border-[var(--separator)] flex flex-col shrink-0 overflow-hidden z-20 select-none shadow-[var(--shadow-popover)]"
-    >
-      {/* Header with Segmented Tabs and Close */}
-      <div className="p-3 border-b border-[var(--separator)] flex items-center justify-between gap-2 shrink-0 bg-[var(--surface)] backdrop-blur-[20px]">
-        <SegmentedControl
-          id="inspector-tabs"
-          size="sm"
-          value={activeTab}
-          onChange={(tab) => onTabChange(tab as any)}
-          options={[
-            { id: 'details', label: 'Details' },
-            { id: 'source', label: 'Source' },
-            {
-              id: 'issues',
-              label: 'Issues',
-              badge: totalIssuesCount > 0 ? totalIssuesCount : undefined,
-            },
-          ]}
-        />
-        <button
-          onClick={onClose}
-          title="Close Inspector (Esc)"
-          className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[var(--text-secondary-color)] hover:text-[var(--text)] hover:bg-[var(--surface-subtle)] transition-colors cursor-pointer"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+  const headerContent = (
+    <div className="p-3 border-b border-[var(--separator)] flex items-center justify-between gap-2 shrink-0 bg-[var(--surface)] backdrop-blur-[20px]">
+      <SegmentedControl
+        id="inspector-tabs"
+        size="sm"
+        value={activeTab}
+        onChange={(tab) => onTabChange(tab as any)}
+        options={[
+          { id: 'details', label: 'Details' },
+          { id: 'source', label: 'Source' },
+          {
+            id: 'issues',
+            label: 'Issues',
+            badge: totalIssuesCount > 0 ? totalIssuesCount : undefined,
+          },
+        ]}
+      />
+      <button
+        onClick={onClose}
+        title="Close Inspector (Esc)"
+        className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[var(--text-secondary-color)] hover:text-[var(--text)] hover:bg-[var(--surface-subtle)] transition-colors cursor-pointer"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
 
+  const mainContent = (
+    <>
       {/* Tab 1: Details */}
       {activeTab === 'details' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-4 text-left">
@@ -171,18 +168,18 @@ export const Inspector: React.FC<InspectorProps> = ({
               {selectedElement.source_snippet && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[12px] font-medium text-[var(--text-secondary-color)]">
+                    <span className="text-[13px] font-medium text-[var(--text-secondary-color)]">
                       Matched Source Sentence
                     </span>
                     <button
                       onClick={() => onTabChange('source')}
-                      className="text-[12px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-[13px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
                     >
                       <span>View in text</span>
-                      <ArrowRight className="w-3 h-3" />
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="p-3 border-l-2 border-[var(--accent)] bg-[var(--accent-subtle)] rounded-r-[8px] text-[13px] text-[var(--text)] leading-relaxed italic">
+                  <div className="p-3 bg-[var(--accent-subtle)] rounded-[8px] text-[13px] text-[var(--text)] leading-relaxed italic">
                     "{selectedElement.source_snippet}"
                   </div>
                 </div>
@@ -191,10 +188,10 @@ export const Inspector: React.FC<InspectorProps> = ({
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[var(--text-secondary-color)]">
               <Layers className="w-8 h-8 opacity-40 mb-2" />
-              <p className="text-[13px] font-medium text-[var(--text)]">
+              <p className="text-[15px] font-medium text-[var(--text)]">
                 No element selected
               </p>
-              <p className="text-[12px] text-[var(--text-secondary-color)] mt-1">
+              <p className="text-[13px] text-[var(--text-secondary-color)] mt-1">
                 Click any task, gateway, or flow on the canvas to inspect its parameters.
               </p>
             </div>
@@ -206,7 +203,7 @@ export const Inspector: React.FC<InspectorProps> = ({
       {activeTab === 'source' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-3 text-left">
           <div className="flex items-center justify-between pb-2 border-b border-[var(--separator)]">
-            <span className="text-[12px] font-semibold text-[var(--text-secondary-color)]">
+            <span className="text-[13px] font-semibold text-[var(--text-secondary-color)]">
               Source Document Transcript
             </span>
             {selectedElement?.source_snippet && (
@@ -223,9 +220,9 @@ export const Inspector: React.FC<InspectorProps> = ({
                 <div
                   key={idx}
                   ref={isHighlighted ? highlightRef : null}
-                  className={`p-1.5 rounded-[6px] transition-colors ${
+                  className={`p-1.5 rounded-[8px] transition-colors ${
                     isHighlighted
-                      ? 'bg-[var(--accent-subtle)] text-[var(--accent)] font-medium border-l-2 border-[var(--accent)]'
+                      ? 'bg-[var(--accent-subtle)] text-[var(--accent)] font-medium'
                       : 'text-[var(--text)] hover:bg-[var(--surface-subtle)]'
                   }`}
                 >
@@ -246,10 +243,10 @@ export const Inspector: React.FC<InspectorProps> = ({
           {totalIssuesCount === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[var(--text-secondary-color)]">
               <CheckCircle className="w-8 h-8 text-[var(--success)] mb-2" />
-              <p className="text-[13px] font-medium text-[var(--text)]">
+              <p className="text-[15px] font-medium text-[var(--text)]">
                 All checks passed
               </p>
-              <p className="text-[12px] text-[var(--text-secondary-color)] mt-1">
+              <p className="text-[13px] text-[var(--text-secondary-color)] mt-1">
                 Process graph is fully connected and valid BPMN 2.0.
               </p>
             </div>
@@ -264,7 +261,7 @@ export const Inspector: React.FC<InspectorProps> = ({
                   {validationIssues.map((issue, idx) => (
                     <div
                       key={idx}
-                      className="p-3 bg-[var(--surface-subtle)] rounded-[8px] border border-[var(--separator)] space-y-1.5"
+                      className="p-3 bg-[var(--surface-subtle)] rounded-[8px] space-y-1.5"
                     >
                       <div className="flex items-center justify-between">
                         <Badge
@@ -291,7 +288,7 @@ export const Inspector: React.FC<InspectorProps> = ({
                       {issue.element_id && onSelectElementById && (
                         <button
                           onClick={() => onSelectElementById(issue.element_id!)}
-                          className="text-[12px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium pt-1"
+                          className="text-[13px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium pt-1"
                         >
                           <span>Highlight element</span>
                           <ArrowRight className="w-3 h-3" />
@@ -311,7 +308,7 @@ export const Inspector: React.FC<InspectorProps> = ({
                   {lintResult.warnings.map((w, idx) => (
                     <div
                       key={idx}
-                      className="p-3 bg-[var(--surface-subtle)] rounded-[8px] border border-[var(--separator)] space-y-1"
+                      className="p-3 bg-[var(--surface-subtle)] rounded-[8px] space-y-1"
                     >
                       <div className="flex items-center justify-between">
                         <Badge variant="neutral" size="sm">
@@ -335,7 +332,7 @@ export const Inspector: React.FC<InspectorProps> = ({
                   {processIr.open_questions.map((q, idx) => (
                     <div
                       key={idx}
-                      className="p-3 bg-[var(--surface-subtle)] rounded-[8px] border border-[var(--separator)] space-y-1"
+                      className="p-3 bg-[var(--surface-subtle)] rounded-[8px] space-y-1"
                     >
                       <div className="flex items-center gap-1.5 text-[var(--accent)]">
                         <HelpCircle className="w-3.5 h-3.5" />
@@ -352,6 +349,47 @@ export const Inspector: React.FC<InspectorProps> = ({
           )}
         </div>
       )}
+    </>
+  );
+
+  if (isBottomSheet) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-none">
+        {/* Scrim */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          onClick={onClose}
+          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-40 cursor-pointer pointer-events-auto"
+        />
+
+        {/* Bottom Sheet */}
+        <motion.aside
+          initial={{ y: '100%' }}
+          animate={{ y: 0 }}
+          exit={{ y: '100%' }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="relative z-50 w-full max-h-[75vh] bg-[var(--surface-solid)] rounded-t-[16px] border-t border-[var(--separator)] flex flex-col overflow-hidden shadow-[var(--shadow-sheet)] select-none pointer-events-auto"
+        >
+          {headerContent}
+          {mainContent}
+        </motion.aside>
+      </div>
+    );
+  }
+
+  return (
+    <motion.aside
+      initial={{ x: 360, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: 360, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      className="w-[360px] h-full bg-[var(--surface-solid)] border-l border-[var(--separator)] flex flex-col shrink-0 overflow-hidden z-20 select-none shadow-[var(--shadow-popover)]"
+    >
+      {headerContent}
+      {mainContent}
     </motion.aside>
   );
 };

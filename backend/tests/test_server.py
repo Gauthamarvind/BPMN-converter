@@ -95,21 +95,26 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertIn("supported_profiles", bulk)
         self.assertIn("available_formats", bulk)
         self.assertEqual(set(bulk["available_formats"]), {".bpmn", ".svg", ".png"})
-        self.assertIn("bpmn_by_profile", bulk)
-
-        for prof in ["generic", "camunda", "signavio", "celonis", "aris"]:
-            self.assertIn(prof, bulk["bpmn_by_profile"])
-            self.assertIn("bpmn:definitions", bulk["bpmn_by_profile"][prof])
+        self.assertIn("camunda", bulk["supported_profiles"])
 
     def test_export_bulk_zip_endpoint(self):
         import zipfile
         import io
         payload = {
             "process_name": "Invoice Approval",
-            "bpmn_by_profile": {
-                "camunda": "<?xml version='1.0'?><bpmn:definitions></bpmn:definitions>",
-                "signavio": "<?xml version='1.0'?><bpmn:definitions></bpmn:definitions>",
-                "generic": "<?xml version='1.0'?><bpmn:definitions></bpmn:definitions>"
+            "ir": {
+                "id": "Process_1",
+                "name": "Invoice Approval",
+                "pools": [{"id": "Pool_1", "name": "Org", "lanes": [{"id": "Lane_1", "name": "Finance"}]}],
+                "elements": [
+                    {"id": "Start_1", "type": "startEvent", "name": "Start", "laneId": "Lane_1"},
+                    {"id": "Task_1", "type": "task", "name": "Approve", "laneId": "Lane_1"},
+                    {"id": "End_1", "type": "endEvent", "name": "End", "laneId": "Lane_1"}
+                ],
+                "flows": [
+                    {"id": "Flow_1", "sourceId": "Start_1", "targetId": "Task_1"},
+                    {"id": "Flow_2", "sourceId": "Task_1", "targetId": "End_1"}
+                ]
             },
             "svg": "<svg xmlns='http://www.w3.org/2000/svg'><rect width='100' height='100'/></svg>",
             "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -123,6 +128,10 @@ class TestServerEndpoints(unittest.TestCase):
         namelist = zf.namelist()
         self.assertIn("invoice_approval_camunda.bpmn", namelist)
         self.assertIn("invoice_approval_signavio.bpmn", namelist)
+        self.assertIn("invoice_approval_generic.bpmn", namelist)
+        self.assertIn("invoice_approval.svg", namelist)
+        self.assertIn("invoice_approval.png", namelist)
+        self.assertIn("README.txt", namelist)
         self.assertIn("invoice_approval_generic.bpmn", namelist)
         self.assertIn("invoice_approval.svg", namelist)
         self.assertIn("invoice_approval.png", namelist)

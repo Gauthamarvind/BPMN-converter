@@ -6,12 +6,25 @@ and on validation failure retries with errors fed back (max 3 attempts).
 
 from __future__ import annotations
 import json
+import logging
 import re
+import sys
 from typing import Optional, Dict, Any, Tuple, Type
 from pathlib import Path
 
 from backend.ir.models import ProcessIR
 from backend.llm.base import LLMProvider
+from backend.llm.errors import (
+    LLMError,
+    LLMConnectionError,
+    LLMAuthenticationError,
+    LLMRateLimitError,
+    LLMResponseError,
+    LLMEmptyResponseError,
+    LLMValidationError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def strip_markdown_fences(text: str) -> str:
@@ -71,7 +84,13 @@ def extract_with_self_healing(
 ) -> Tuple[ProcessIR, Dict[str, Any]]:
     """
     Executes an extraction prompt with up to 3 retry attempts feeding validation errors back.
+    Logs each stage and raises specific LLM errors on transport or schema failure.
     """
+    logger.info(
+        f"[Process2BPMN LLM] Starting structured extraction with provider={provider.__class__.__name__}, "
+        f"max_attempts={max_attempts}, temperature={temperature}"
+    )
+
     messages = [
         {"role": "system", "content": system_message},
         {"role": "user", "content": prompt}
@@ -86,37 +105,70 @@ def extract_with_self_healing(
     repair_template = ""
     if repair_template_path.exists():
         repair_template = repair_template_path.read_text(encoding="utf-8")
+        logger.debug(f"[Process2BPMN LLM] Loaded repair template from {repair_template_path}")
+    else:
+        logger.debug("[Process2BPMN LLM] Repair template file not found, using default repair prompt string")
 
     for attempt in range(1, max_attempts + 1):
+        logger.info(f"[Process2BPMN LLM] Extraction attempt {attempt}/{max_attempts} sending to LLM...")
+
         parsed_json, raw_text, usage = provider.complete(
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens
         )
-        last_raw_text = raw_text
+        last_raw_text = raw_text or ""
 
         for k in total_usage:
             total_usage[k] += usage.get(k, 0)
 
-        # Check for fatal transport / network errors
-        if any(err_kw in raw_text for err_kw in ["Connection refused", "ConnectError", "NameResolutionError", "401 Unauthorized", "Could not resolve host"]):
-            raise ConnectionError(f"LLM endpoint connection failed: {raw_text}")
+        # 1. Check for authentication failures
+        if any(auth_kw in last_raw_text.lower() for auth_kw in ["401 unauthorized", "invalid api key", "api_key_invalid", "unauthenticated", "invalid_api_key"]):
+            logger.error(f"[Process2BPMN LLM] Authentication failed on attempt {attempt}: {last_raw_text}")
+            raise LLMAuthenticationError(f"LLM authentication failed: {last_raw_text}")
 
-        # Attempt parse and validation
-        instance, error_msg = parse_and_validate_json(raw_text, ProcessIR)
-        if instance is not None:
-            return instance, total_usage
+        # 2. Check for rate limit / quota exhaustion
+        if any(rl_kw in last_raw_text.lower() for rl_kw in ["429", "rate limit", "quota exceeded", "resource has been exhausted", "too many requests"]):
+            logger.error(f"[Process2BPMN LLM] Rate limit / quota exceeded on attempt {attempt}: {last_raw_text}")
+            raise LLMRateLimitError(f"LLM rate limit exceeded: {last_raw_text}")
 
-        last_error = error_msg or "Unknown validation error"
-        print(f"[Process2BPMN] Extraction attempt {attempt}/{max_attempts} failed validation: {last_error}", file=sys.stderr)
+        # 3. Check for transport / connection errors
+        if any(conn_kw in last_raw_text for conn_kw in ["Connection refused", "ConnectError", "NameResolutionError", "Could not resolve host", "timed out", "TimeoutException"]):
+            logger.error(f"[Process2BPMN LLM] Connection failed on attempt {attempt}: {last_raw_text}")
+            raise LLMConnectionError(f"LLM endpoint connection failed: {last_raw_text}")
+
+        # 4. Check for generic API errors
+        if any(err_kw in last_raw_text for err_kw in ["API error:", "Unexpected connection error:"]):
+            logger.error(f"[Process2BPMN LLM] Provider error on attempt {attempt}: {last_raw_text}")
+            raise LLMResponseError(f"LLM provider error: {last_raw_text}")
+
+        # 5. Check if completion is completely empty
+        if not last_raw_text.strip():
+            last_error = "Empty response received from LLM."
+            logger.warning(f"[Process2BPMN LLM] Attempt {attempt}/{max_attempts} received empty response.")
+        else:
+            # 6. Attempt JSON parse and Pydantic schema validation
+            instance, error_msg = parse_and_validate_json(last_raw_text, ProcessIR)
+            if instance is not None:
+                logger.info(
+                    f"[Process2BPMN LLM] Extraction succeeded on attempt {attempt}/{max_attempts}! "
+                    f"Parsed {len(instance.elements)} elements, {len(instance.flows)} flows. "
+                    f"Total tokens used: {total_usage.get('total_tokens', 0)}"
+                )
+                return instance, total_usage
+
+            last_error = error_msg or "Unknown validation error"
+            logger.warning(f"[Process2BPMN LLM] Attempt {attempt}/{max_attempts} validation failed: {last_error}")
+            logger.debug(f"[Process2BPMN LLM] Invalid response preview: {last_raw_text[:300]}")
 
         if attempt < max_attempts:
+            logger.info(f"[Process2BPMN LLM] Preparing self-healing prompt for retry attempt {attempt + 1}...")
             # Build repair prompt using /prompts/repair_syntax.md
             if repair_template:
                 repair_prompt = (
                     repair_template
                     .replace("{{VALIDATION_ERRORS}}", last_error)
-                    .replace("{{INVALID_JSON}}", raw_text[:2000])
+                    .replace("{{INVALID_JSON}}", last_raw_text[:2000])
                 )
             else:
                 repair_prompt = (
@@ -125,8 +177,17 @@ def extract_with_self_healing(
                 )
 
             # Append assistant response and new user prompt
-            messages.append({"role": "assistant", "content": raw_text})
+            messages.append({"role": "assistant", "content": last_raw_text})
             messages.append({"role": "user", "content": repair_prompt})
 
-    # If all attempts failed, raise with details
-    raise ValueError(f"Failed to generate valid Process IR after {max_attempts} attempts. Last error: {last_error}\nResponse was:\n{last_raw_text[:500]}")
+    # If all attempts failed, raise custom LLMValidationError with complete context
+    logger.error(
+        f"[Process2BPMN LLM] Extraction failed after {max_attempts} attempts. "
+        f"Last error: {last_error}"
+    )
+    raise LLMValidationError(
+        message=f"Failed to generate valid Process IR after {max_attempts} attempts. Last error: {last_error}\nResponse was:\n{last_raw_text[:500]}",
+        last_raw_output=last_raw_text,
+        attempts=max_attempts,
+        last_error=last_error
+    )

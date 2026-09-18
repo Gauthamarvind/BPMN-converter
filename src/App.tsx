@@ -50,6 +50,20 @@ export default function App() {
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [inspectorTab, setInspectorTab] = useState<'details' | 'source' | 'issues'>('details');
 
+  // Responsive Breakpoints: inspector bottom sheet < 1100px, sidebar sheet < 800px
+  const [windowWidth, setWindowWidth] = useState<number>(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  );
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isBelow1100 = windowWidth < 1100;
+  const isBelow800 = windowWidth < 800;
+
   // Process Output States
   const [bpmnXml, setBpmnXml] = useState<string>('');
   const [processIr, setProcessIr] = useState<ProcessIR | null>(null);
@@ -374,7 +388,7 @@ export default function App() {
 
       {/* 2. Main Stage: Left Sidebar + Full Canvas + Right Inspector */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Sidebar (320px -> 44px) */}
+        {/* Left Sidebar (320px -> 44px on desktop, left sheet on <800px) */}
         <Sidebar
           isOpen={isSidebarOpen}
           onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -390,6 +404,7 @@ export default function App() {
           }
           isLoading={loading}
           error={sidebarError}
+          isSheet={isBelow800}
         />
 
         {/* Center: BPMN Canvas (Fills Remaining Space with 16px Inset, No Card Border) */}
@@ -434,7 +449,7 @@ export default function App() {
           </div>
         </main>
 
-        {/* Right Inspector (360px) */}
+        {/* Right Inspector (360px on desktop, bottom sheet on <1100px) */}
         <Inspector
           isOpen={isInspectorOpen}
           onClose={() => setIsInspectorOpen(false)}
@@ -445,6 +460,7 @@ export default function App() {
           validationIssues={validationIssues}
           lintResult={lintResult}
           sourceText={normalizedText || inputText}
+          isBottomSheet={isBelow1100}
           onSelectElementById={(id) => {
             setSelectedElementId(id);
             setInspectorTab('details');

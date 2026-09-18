@@ -69,7 +69,7 @@ async function svgToPngBlob(svgString: string, scale: number = 2): Promise<Blob>
         return;
       }
 
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
@@ -203,7 +203,7 @@ export const BpmnViewerComponent = forwardRef<BpmnViewerHandle, BpmnViewerProps>
             exportedAt: new Date().toISOString(),
             profiles: Object.keys(profileXmlMap),
             formats: ['.bpmn', '.svg', '.png'],
-            generator: 'Text2BPMN Pipeline 2.0',
+            generator: 'Process2BPMN Pipeline 2.0',
           };
           zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 

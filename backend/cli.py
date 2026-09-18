@@ -211,21 +211,16 @@ def convert_file(
         doc = ingest_file(content_bytes, path.name)
 
         if not mock:
-            try:
-                prov = get_llm_provider(
-                    provider_name=provider_name or config.llm.provider,
-                    base_url=base_url or config.llm.base_url,
-                    api_key=api_key or config.llm.api_key,
-                    model=model or config.llm.model
-                )
-                extractor = ProcessExtractor(provider=prov)
-                ir, usage = extractor.extract(doc.normalized_text, title=title)
-                print(f"[Process2BPMN] LLM Extraction successful ({usage.get('total_tokens', 0)} tokens used).")
-            except Exception as ex:
-                print(f"[Process2BPMN] LLM extraction unavailable or failed: {ex}. Falling back to deterministic rule extraction.")
-                ir = None
-
-        if ir is None:
+            prov = get_llm_provider(
+                provider_name=provider_name or config.llm.provider,
+                base_url=base_url or config.llm.base_url,
+                api_key=api_key or config.llm.api_key,
+                model=model or config.llm.model
+            )
+            extractor = ProcessExtractor(provider=prov)
+            ir, usage = extractor.extract(doc.normalized_text, title=title)
+            print(f"[Process2BPMN] LLM Extraction successful ({usage.get('total_tokens', 0)} tokens used).")
+        else:
             ir = generate_mock_ir_from_text(doc.normalized_text, title=title)
 
     # Step 2: Validate & Repair

@@ -30,6 +30,7 @@ export interface SidebarProps {
   onConvert: () => void;
   isLoading: boolean;
   error?: string | null;
+  isSheet?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -45,6 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onConvert,
   isLoading,
   error,
+  isSheet = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -100,6 +102,173 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const parts = name.split('.');
     return parts.length > 1 ? parts.pop()?.toUpperCase() : '';
   };
+
+  if (isSheet) {
+    return (
+      <AnimatePresence>
+        {isOpen && (
+          <div className="fixed inset-0 z-50 flex">
+            {/* Scrim */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={onToggle}
+              className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-40 cursor-pointer"
+            />
+
+            {/* Slide-over Sheet */}
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="relative z-50 w-[320px] max-w-[85vw] h-full bg-[var(--surface-solid)] border-r border-[var(--separator)] flex flex-col justify-between p-4 overflow-y-auto shadow-[var(--shadow-sheet)] select-none"
+            >
+              <div className="space-y-4">
+                {/* Header: Title & Collapse Button */}
+                <div className="flex items-center justify-between pb-1">
+                  <span className="text-[15px] font-semibold text-[var(--text)]">
+                    Process Input
+                  </span>
+                  <button
+                    onClick={onToggle}
+                    title="Close Sidebar"
+                    className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[var(--text-secondary-color)] hover:text-[var(--text)] hover:bg-[var(--surface-subtle)] transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Drop Zone */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileInputChange}
+                  accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt"
+                  className="hidden"
+                />
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-4 rounded-[12px] border border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center gap-2 ${
+                    isDragging
+                      ? 'border-[var(--accent)] bg-[var(--accent-subtle)]'
+                      : 'border-[var(--separator-strong)] bg-[var(--surface-subtle)] hover:bg-[var(--surface-solid)]'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-[var(--surface-solid)] flex items-center justify-center text-[var(--accent)] shadow-xs">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-medium text-[var(--text)]">
+                      Drop file or click to browse
+                    </p>
+                    <p className="text-[13px] text-[var(--text-secondary-color)] mt-0.5">
+                      .docx, .xlsx, .pdf, .csv, .txt, .md
+                    </p>
+                  </div>
+                </div>
+
+                {/* Detected File Info Caption */}
+                {fileName && (
+                  <div className="px-3 py-2 bg-[var(--surface-subtle)] rounded-[8px] flex items-center justify-between text-[12px]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+                      <span className="truncate text-[var(--text)] font-medium text-[13px]">
+                        {fileName}
+                      </span>
+                    </div>
+                    <div className="shrink-0 text-[var(--text-secondary-color)] ml-2 text-[12px]">
+                      {getFileExtension(fileName)} {fileSize ? `· ${formatFileSize(fileSize)}` : ''}
+                    </div>
+                  </div>
+                )}
+
+                {/* Inline Error */}
+                {error && (
+                  <div className="p-2.5 rounded-[8px] bg-[var(--danger-subtle)] text-[var(--danger)] text-[13px] flex items-start gap-1.5 leading-snug">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                {/* Raw Text Input Area */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[13px] font-medium text-[var(--text)]">
+                      Or paste process text
+                    </label>
+                    <Popover
+                      id="samples-popover-mobile"
+                      isOpen={isSamplesOpen}
+                      onClose={() => setIsSamplesOpen(false)}
+                      trigger={
+                        <button
+                          type="button"
+                          onClick={() => setIsSamplesOpen(!isSamplesOpen)}
+                          className="text-[13px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>Samples</span>
+                        </button>
+                      }
+                    >
+                      <div className="w-60 p-1.5 space-y-1 text-left">
+                        <div className="px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary-color)]">
+                          Load Sample Process
+                        </div>
+                        {samples.map((s) => (
+                          <button
+                            key={s.name}
+                            onClick={() => {
+                              onSelectSample(s);
+                              setIsSamplesOpen(false);
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-[8px] text-[13px] text-[var(--text)] hover:bg-[var(--surface-subtle)] text-left truncate transition-colors cursor-pointer"
+                          >
+                            <div className="truncate font-medium">{s.title || s.name}</div>
+                            <div className="text-[12px] text-[var(--text-secondary-color)] uppercase">
+                              .{s.extension}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </Popover>
+                  </div>
+
+                  <Textarea
+                    value={inputText}
+                    onChange={(e) => onInputChange(e.target.value)}
+                    placeholder="Paste steps, interview notes, or SOP..."
+                    rows={8}
+                  />
+                </div>
+              </div>
+
+              {/* Primary Convert Button */}
+              <div className="pt-4 border-t border-[var(--separator)]">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={onConvert}
+                  isLoading={isLoading}
+                  disabled={isLoading || (!inputText.trim() && !fileName)}
+                  className="w-full"
+                  icon={<Sparkles className="w-4 h-4" />}
+                >
+                  {isLoading ? 'Converting Process...' : 'Convert Process'}
+                </Button>
+              </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
+    );
+  }
 
   return (
     <motion.aside
@@ -177,20 +346,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`p-4 rounded-[12px] border-2 border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center gap-2 ${
+              className={`p-4 rounded-[12px] border border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center gap-2 ${
                 isDragging
                   ? 'border-[var(--accent)] bg-[var(--accent-subtle)]'
                   : 'border-[var(--separator-strong)] bg-[var(--surface-subtle)] hover:bg-[var(--surface-solid)]'
               }`}
             >
-              <div className="w-9 h-9 rounded-full bg-[var(--surface-solid)] border border-[var(--separator)] flex items-center justify-center text-[var(--accent)] shadow-xs">
+              <div className="w-9 h-9 rounded-full bg-[var(--surface-solid)] flex items-center justify-center text-[var(--accent)] shadow-xs">
                 <Upload className="w-4 h-4" />
               </div>
               <div>
                 <p className="text-[13px] font-medium text-[var(--text)]">
                   Drop file or click to browse
                 </p>
-                <p className="text-[12px] text-[var(--text-secondary-color)] mt-0.5">
+                <p className="text-[13px] text-[var(--text-secondary-color)] mt-0.5">
                   .docx, .xlsx, .pdf, .csv, .txt, .md
                 </p>
               </div>
@@ -198,14 +367,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Detected File Info Caption */}
             {fileName && (
-              <div className="px-3 py-2 bg-[var(--surface-subtle)] rounded-[8px] border border-[var(--separator)] flex items-center justify-between text-[12px]">
+              <div className="px-3 py-2 bg-[var(--surface-subtle)] rounded-[8px] flex items-center justify-between text-[12px]">
                 <div className="flex items-center gap-2 min-w-0">
                   <FileText className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
-                  <span className="truncate text-[var(--text)] font-medium">
+                  <span className="truncate text-[var(--text)] font-medium text-[13px]">
                     {fileName}
                   </span>
                 </div>
-                <div className="shrink-0 text-[var(--text-secondary-color)] ml-2">
+                <div className="shrink-0 text-[var(--text-secondary-color)] ml-2 text-[12px]">
                   {getFileExtension(fileName)} {fileSize ? `· ${formatFileSize(fileSize)}` : ''}
                 </div>
               </div>
@@ -213,7 +382,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Inline Error under Dropzone if any */}
             {error && (
-              <div className="p-2.5 rounded-[8px] bg-[var(--danger-subtle)] text-[var(--danger)] text-[12px] flex items-start gap-1.5 leading-snug">
+              <div className="p-2.5 rounded-[8px] bg-[var(--danger-subtle)] text-[var(--danger)] text-[13px] flex items-start gap-1.5 leading-snug">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
@@ -234,9 +403,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsSamplesOpen(!isSamplesOpen)}
-                      className="text-[12px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
+                      className="text-[13px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
                     >
-                      <BookOpen className="w-3 h-3" />
+                      <BookOpen className="w-3.5 h-3.5" />
                       <span>Samples</span>
                     </button>
                   }

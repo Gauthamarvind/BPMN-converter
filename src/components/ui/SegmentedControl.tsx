@@ -57,7 +57,7 @@ export function SegmentedControl<T extends string = string>({
             tabIndex={isSelected ? 0 : -1}
             onClick={() => onChange(option.id)}
             onKeyDown={(e) => handleKeyDown(e, idx)}
-            className={`relative px-2.5 h-full rounded-[6px] text-[13px] transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] z-10 ${
+            className={`relative px-2.5 h-full rounded-[8px] text-[13px] transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] z-10 ${
               isSelected
                 ? 'font-medium text-[var(--text)]'
                 : 'text-[var(--text-secondary-color)] hover:text-[var(--text)]'
@@ -66,7 +66,7 @@ export function SegmentedControl<T extends string = string>({
             {isSelected && (
               <motion.div
                 layoutId={`${containerId}-active-pill`}
-                className="absolute inset-0 bg-[var(--surface-solid)] rounded-[6px] shadow-xs -z-10"
+                className="absolute inset-0 bg-[var(--surface-solid)] rounded-[8px] shadow-xs -z-10"
                 transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               />
             )}
