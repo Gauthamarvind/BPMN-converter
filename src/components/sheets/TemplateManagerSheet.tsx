@@ -142,17 +142,13 @@ export const TemplateManagerSheet: React.FC<TemplateManagerSheetProps> = ({
     }
   };
 
-  const handleDownloadBlank = (type: 'xlsx' | 'docx') => {
-    window.location.href = `/api/templates/download-blank?type=${type}&sample=true`;
-  };
-
   return (
     <Sheet
       id="template-manager-sheet"
       isOpen={isOpen}
       onClose={onClose}
       title="BPMN Template Manager"
-      subtitle="Corporate swimlane layouts, vendor profiles, and blank structured forms."
+      subtitle="Corporate swimlane layouts, vendor profiles, and reference templates."
     >
       <div className="space-y-6 text-left">
         {/* Banner Messages */}
@@ -354,34 +350,6 @@ export const TemplateManagerSheet: React.FC<TemplateManagerSheetProps> = ({
                 </div>
               );
             })}
-          </div>
-        </div>
-
-        {/* 3. Blank Capture Forms Download */}
-        <div className="space-y-2.5 pt-2 border-t border-[var(--separator)]">
-          <span className="text-[13px] font-semibold text-[var(--text)]">
-            Blank Capture Forms
-          </span>
-          <p className="text-[12px] text-[var(--text-secondary-color)]">
-            Pre-configured templates for manual process interviews and spreadsheet collection.
-          </p>
-          <div className="flex items-center gap-2 pt-1">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<FileSpreadsheet className="w-3.5 h-3.5" />}
-              onClick={() => handleDownloadBlank('xlsx')}
-            >
-              Excel Form (.xlsx)
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<FileText className="w-3.5 h-3.5" />}
-              onClick={() => handleDownloadBlank('docx')}
-            >
-              Word Form (.docx)
-            </Button>
           </div>
         </div>
       </div>

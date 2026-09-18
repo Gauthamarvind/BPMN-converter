@@ -9,6 +9,7 @@ import os
 import sys
 import re
 import io
+import json
 import time
 import base64
 import zipfile
@@ -260,20 +261,90 @@ def get_profiles():
 def get_samples():
     samples_dir = _PROJECT_ROOT / "samples"
     samples = []
+    manifest_map = {}
+    
+    # Load manifest.json if present
+    manifest_file = samples_dir / "manifest.json"
+    if manifest_file.exists():
+        try:
+            with open(manifest_file, "r", encoding="utf-8") as mf:
+                manifest_items = json.load(mf)
+                if isinstance(manifest_items, list):
+                    for item in manifest_items:
+                        if isinstance(item, dict) and "filename" in item:
+                            manifest_map[item["filename"]] = item
+                elif isinstance(manifest_items, dict):
+                    manifest_map = manifest_items
+        except Exception as e:
+            logger.warning(f"Failed to load samples manifest.json: {e}")
+
+    binary_extensions = {".xlsx", ".xls", ".docx", ".pdf"}
+
     if samples_dir.exists():
         for f in sorted(samples_dir.iterdir()):
-            if f.is_file() and not f.name.endswith(".bpmn"):
-                try:
-                    content = f.read_text(encoding="utf-8", errors="ignore")
-                    samples.append({
-                        "name": f.name,
-                        "title": f.stem.replace("_", " ").title(),
-                        "extension": f.suffix,
-                        "content": content
-                    })
-                except Exception:
-                    pass
+            if f.is_file() and not f.name.endswith(".bpmn") and f.name not in ("manifest.json", "README.md"):
+                ext = f.suffix.lower()
+                meta = manifest_map.get(f.name, {})
+                title = meta.get("title") or f.stem.replace("_", " ").title()
+                desc = meta.get("description") or f"Sample process workflow ({ext})."
+                sample_type = meta.get("type") or ext.lstrip(".")
+                
+                download_url = f"/api/samples/download/{f.name}"
+                content = None
+
+                if ext not in binary_extensions:
+                    try:
+                        content = f.read_text(encoding="utf-8", errors="ignore")
+                    except Exception:
+                        content = None
+
+                sample_entry = {
+                    "name": f.name,
+                    "filename": f.name,
+                    "title": title,
+                    "description": desc,
+                    "type": sample_type,
+                    "extension": ext.lstrip("."),
+                    "download_url": download_url,
+                    "size": f.stat().st_size if f.exists() else 0,
+                }
+                if content is not None:
+                    sample_entry["content"] = content
+
+                samples.append(sample_entry)
+
     return {"samples": samples}
+
+
+@app.get("/api/samples/download/{filename}")
+def download_sample_file(filename: str):
+    """Serves sample files for preview and direct conversion."""
+    safe_name = Path(filename).name
+    file_path = _PROJECT_ROOT / "samples" / safe_name
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Sample file not found")
+    
+    ext = file_path.suffix.lower()
+    media_type = "application/octet-stream"
+    if ext == ".xlsx":
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif ext == ".docx":
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif ext == ".pdf":
+        media_type = "application/pdf"
+    elif ext in (".txt", ".md"):
+        media_type = "text/plain; charset=utf-8"
+    elif ext == ".csv":
+        media_type = "text/csv; charset=utf-8"
+    elif ext == ".vtt":
+        media_type = "text/vtt; charset=utf-8"
+
+    return FileResponse(
+        str(file_path),
+        media_type=media_type,
+        filename=safe_name
+    )
+
 
 
 # =========================================================================
@@ -285,6 +356,28 @@ def list_templates():
     """Lists all stored reference and document templates."""
     templates = template_storage.list_templates()
     return {"templates": [t.model_dump() for t in templates]}
+
+
+@app.get("/api/templates/download-blank")
+def download_blank_template_query(type: str = "xlsx", sample: bool = True):
+    """Downloads a pre-formatted Excel or Word template for structured capture with query params."""
+    fmt = type.lower()
+    if fmt == "xlsx":
+        file_bytes = generate_blank_xlsx(include_sample=sample)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename = "Process_Capture_Template_Example.xlsx" if sample else "Process_Capture_Template.xlsx"
+    elif fmt == "docx":
+        file_bytes = generate_blank_docx(include_sample=sample)
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        filename = "Process_Capture_Template_Example.docx" if sample else "Process_Capture_Template.docx"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid format type. Supported: 'xlsx', 'docx'.")
+
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 @app.get("/api/templates/{template_id}")
@@ -353,28 +446,6 @@ def map_actors_to_lanes(req: MapLanesRequest):
     mapper = LaneMapper(spec)
     mapping_result = mapper.map_actors(req.actors)
     return mapping_result.model_dump()
-
-
-@app.get("/api/templates/download-blank")
-def download_blank_template_query(type: str = "xlsx", sample: bool = True):
-    """Downloads a pre-formatted Excel or Word template for structured capture with query params."""
-    fmt = type.lower()
-    if fmt == "xlsx":
-        file_bytes = generate_blank_xlsx(include_sample=sample)
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        filename = "Process_Capture_Template.xlsx"
-    elif fmt == "docx":
-        file_bytes = generate_blank_docx(include_sample=sample)
-        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        filename = "Process_Capture_Template.docx"
-    else:
-        raise HTTPException(status_code=400, detail="Invalid format type. Supported: 'xlsx', 'docx'.")
-
-    return Response(
-        content=file_bytes,
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
 
 
 @app.get("/api/templates/download-blank/{format_type}")

@@ -1,0 +1,40 @@
+%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 1018 >> stream
+BT
+/F1 12 Tf
+14.4 TL
+50 720 Td
+(STANDARD OPERATING PROCEDURE: INVOICE PAYMENT & AUDIT WORKFLOW) Tj
+T* () Tj
+T* (1. Purpose and Scope) Tj
+T* (This procedure outlines the end-to-end verification and disbursement process for vendor invoices.) Tj
+T* () Tj
+T* (2. Process Steps) Tj
+T* (Step 1: Accounts Payable receives the vendor invoice by email and enters the invoice into SAP.) Tj
+T* (Step 2: Accounts Payable performs 3-way matching against the Purchase Order and Goods Receipt.) Tj
+T* (Step 3: If invoice amount exceeds 0,000, Finance Director conducts executive budget review.) Tj
+T* (Step 4: If budget review is rejected, Accounts Payable sends a dispute notification to the vendor.) Tj
+T* (Step 5: If approved or under threshold, Treasury schedules the automated bank wire transfer.) Tj
+T* (Step 6: Finance Specialist archives the payment confirmation receipt and closes the account record.) Tj
+T* () Tj
+T* (3. Responsible Actors) Tj
+T* (Accounts Payable, Finance Director, Treasury, and Finance Specialist.) Tj
+ET
+endstream
+endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001311 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+1381
+%%EOF

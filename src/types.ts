@@ -80,9 +80,14 @@ export interface ProfileMetadata {
 
 export interface SampleFile {
   name: string;
+  filename?: string;
   title: string;
+  description?: string;
+  type?: string;
   extension: string;
-  content: string;
+  download_url?: string;
+  size?: number;
+  content?: string;
 }
 
 export interface TemplateRecord {

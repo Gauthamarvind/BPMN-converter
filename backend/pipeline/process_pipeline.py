@@ -33,7 +33,7 @@ from backend.templates.simple_parser import (
     TEMPLATE_KIND_LEGACY,
 )
 from backend.templates.mapper import LaneMapper
-from backend.templates.bpmn_renderer import BpmnTemplateRenderer
+
 
 logger = logging.getLogger(__name__)
 template_storage = TemplateStorage()
@@ -202,6 +202,7 @@ def process_pipeline(
     # 7. BPMN 2.0 XML Serialization (TemplateRenderer or standard Serializer)
     profile_config = linter.load_profile(profile_name)
     if template_spec and template_raw_xml:
+        from backend.templates.bpmn_renderer import BpmnTemplateRenderer
         renderer = BpmnTemplateRenderer(
             template_raw_xml=template_raw_xml,
             spec=template_spec,

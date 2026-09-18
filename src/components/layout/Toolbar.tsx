@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings as SettingsIcon, Layers, Download, Check, GitMerge, ChevronDown, Table, FileSpreadsheet } from 'lucide-react';
+import { Settings as SettingsIcon, Layers, Download, Check, GitMerge, ChevronDown, Table, BookOpen, FileSpreadsheet } from 'lucide-react';
 import { ProfileMetadata, TemplateRecord } from '../../types';
 import { Button } from '../ui/Button';
 import { SegmentedControl, SegmentedOption } from '../ui/SegmentedControl';
@@ -14,6 +14,7 @@ export interface ToolbarProps {
   selectedTemplateId: string;
   onSelectTemplate: (templateId: string) => void;
   onOpenTemplateManager: () => void;
+  onOpenTemplatesAndSamples?: () => void;
   onOpenLaneMapping: () => void;
   onOpenSettings: () => void;
   onOpenStepBuilder?: () => void;
@@ -35,6 +36,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   selectedTemplateId,
   onSelectTemplate,
   onOpenTemplateManager,
+  onOpenTemplatesAndSamples,
   onOpenLaneMapping,
   onOpenSettings,
   onOpenStepBuilder,
@@ -192,6 +194,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </button>
           </div>
         </Popover>
+
+        {/* Templates & Samples Action */}
+        {onOpenTemplatesAndSamples && (
+          <Button
+            id="toolbar-templates-samples-btn"
+            variant="ghost"
+            size="md"
+            icon={<BookOpen className="w-4 h-4 text-[var(--text-secondary-color)]" />}
+            onClick={onOpenTemplatesAndSamples}
+            title="Templates & Sample Workflows"
+          >
+            <span>Templates & samples</span>
+          </Button>
+        )}
 
         {/* Step Builder (No-Code Process Capture) */}
         {onOpenStepBuilder && (

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:signavio="http://www.signavio.com"
+                  id="Definitions_Signavio_Template"
+                  targetNamespace="http://www.signavio.com/bpmn20"
+                  exporter="Signavio Process Editor"
+                  exporterVersion="14.3.0">
+  <bpmn:collaboration id="Collaboration_Signavio_Template">
+    <bpmn:participant id="Participant_Signavio" name="Signavio Corporate Process" processRef="Process_Signavio_Template"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Signavio_Template" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Signavio">
+      <bpmn:lane id="Lane_Customer_Service" name="Customer Service">
+        <bpmn:flowNodeRef>Event_Customer_Call</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Operations" name="Operations"/>
+      <bpmn:lane id="Lane_Finance" name="Finance"/>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Event_Customer_Call" name="Customer Inquiry Received"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Signavio">
+    <bpmndi:BPMNPlane id="BPMNPlane_Signavio" bpmnElement="Collaboration_Signavio_Template">
+      <bpmndi:BPMNShape id="Shape_Participant_Signavio" bpmnElement="Participant_Signavio" isHorizontal="true">
+        <dc:Bounds x="120" y="80" width="1350" height="540"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_CS" bpmnElement="Lane_Customer_Service" isHorizontal="true">
+        <dc:Bounds x="150" y="80" width="1320" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Ops" bpmnElement="Lane_Operations" isHorizontal="true">
+        <dc:Bounds x="150" y="260" width="1320" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Fin" bpmnElement="Lane_Finance" isHorizontal="true">
+        <dc:Bounds x="150" y="440" width="1320" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Event_Call" bpmnElement="Event_Customer_Call">
+        <dc:Bounds x="210" y="152" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

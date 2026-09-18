@@ -92,7 +92,7 @@ def detect_template_kind(raw_content: bytes, filename: str) -> str:
     ext = Path(filename).suffix.lower()
 
     # 1. Excel Workbook (.xlsx)
-    if ext == ".xlsx" or raw_content.startswith(b"PK"):
+    if ext in (".xlsx", ".xls") or (ext not in (".docx", ".pdf", ".csv", ".json") and raw_content.startswith(b"PK") and b"xl/" in raw_content[:4096]):
         try:
             wb = openpyxl.load_workbook(io.BytesIO(raw_content), read_only=True, data_only=True)
             # Check hidden _meta sheet
@@ -203,9 +203,9 @@ class SimpleTemplateParser:
         ext = Path(filename).suffix.lower()
         process_name = Path(filename).stem.replace("_", " ").title()
 
-        if ext == ".xlsx" or raw_content.startswith(b"PK"):
+        if ext in (".xlsx", ".xls") or (ext not in (".docx", ".pdf", ".csv", ".json") and raw_content.startswith(b"PK") and b"xl/" in raw_content[:4096]):
             return self._parse_xlsx(raw_content, process_name, filename)
-        elif ext == ".docx":
+        elif ext == ".docx" or (ext not in (".xlsx", ".pdf", ".csv", ".json") and raw_content.startswith(b"PK") and b"word/" in raw_content[:4096]):
             return self._parse_docx(raw_content, process_name, filename)
         elif ext == ".csv":
             return self._parse_csv(raw_content, process_name, filename)

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_Celonis_Template"
+                  targetNamespace="http://celonis.com/schema/bpmn"
+                  exporter="Celonis Process Mining"
+                  exporterVersion="4.8">
+  <bpmn:collaboration id="Collaboration_Celonis">
+    <bpmn:participant id="Participant_Celonis" name="Order to Cash Template" processRef="Process_Celonis"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Celonis" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Celonis">
+      <bpmn:lane id="Lane_Sales_Order" name="Sales Order Processing"/>
+      <bpmn:lane id="Lane_Logistics" name="Logistics and Warehousing"/>
+      <bpmn:lane id="Lane_Invoicing" name="Accounts Receivable"/>
+    </bpmn:laneSet>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Celonis">
+    <bpmndi:BPMNPlane id="BPMNPlane_Celonis" bpmnElement="Collaboration_Celonis">
+      <bpmndi:BPMNShape id="Shape_Participant_Celonis" bpmnElement="Participant_Celonis" isHorizontal="true">
+        <dc:Bounds x="100" y="80" width="1300" height="540"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Celonis_1" bpmnElement="Lane_Sales_Order" isHorizontal="true">
+        <dc:Bounds x="130" y="80" width="1270" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Celonis_2" bpmnElement="Lane_Logistics" isHorizontal="true">
+        <dc:Bounds x="130" y="260" width="1270" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Celonis_3" bpmnElement="Lane_Invoicing" isHorizontal="true">
+        <dc:Bounds x="130" y="440" width="1270" height="180"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
