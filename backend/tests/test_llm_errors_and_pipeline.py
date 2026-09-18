@@ -39,19 +39,21 @@ class FailingMockLLMProvider(LLMProvider):
     def __init__(self, mode: str = "invalid_json"):
         self.mode = mode
         self.attempts = 0
+        self.provider = "mock_provider"
+        self.model = "test-model"
 
     def complete(self, messages, json_schema=None, temperature=0.1, max_tokens=4096):
         self.attempts += 1
         if self.mode == "invalid_json":
             return None, "{ this is invalid json }", {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}
         elif self.mode == "auth_error":
-            return None, "401 Unauthorized: Invalid API key provided", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            raise LLMAuthenticationError("401 Unauthorized: Invalid API key provided", provider="mock", model="test-model")
         elif self.mode == "rate_limit":
-            return None, "429 Too Many Requests: Rate limit exceeded", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            raise LLMRateLimitError("429 Too Many Requests: Rate limit exceeded", provider="mock", model="test-model")
         elif self.mode == "connection_error":
-            return None, "Connection refused by host", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            raise LLMConnectionError("Failed to reach host endpoint", provider="mock", model="test-model")
         elif self.mode == "api_error":
-            return None, "API error: Internal server error 500", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            raise LLMResponseError("HTTP 500 internal provider failure", provider="mock", model="test-model")
         elif self.mode == "heal_on_attempt_2":
             if self.attempts == 1:
                 return None, "{ bad json }", {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}
@@ -77,11 +79,15 @@ class TestLLMErrorsAndStructured(unittest.TestCase):
     def test_validation_error_attributes(self):
         err = LLMValidationError(
             message="Validation failed",
+            provider="openai_compatible",
+            model="llama3",
             last_raw_output="{ invalid }",
             attempts=3,
             last_error="JSON syntax error",
             details={"field": "elements"}
         )
+        self.assertEqual(err.provider, "openai_compatible")
+        self.assertEqual(err.model, "llama3")
         self.assertEqual(err.attempts, 3)
         self.assertEqual(err.last_raw_output, "{ invalid }")
         self.assertEqual(err.last_error, "JSON syntax error")

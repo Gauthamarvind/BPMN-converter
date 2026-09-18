@@ -8,27 +8,7 @@ from typing import List, Optional, Literal, Dict, Any
 import re
 import json
 
-try:
-    from pydantic import BaseModel, Field, field_validator
-    PYDANTIC_AVAILABLE = True
-except ImportError:
-    PYDANTIC_AVAILABLE = False
-    class BaseModel:  # type: ignore
-        def __init__(self, **kwargs):
-            # Assign class-level defaults
-            for k in dir(self.__class__):
-                if not k.startswith("_"):
-                    val = getattr(self.__class__, k)
-                    if not callable(val):
-                        setattr(self, k, [] if isinstance(val, list) else val)
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-        def model_dump(self):
-            return self.__dict__
-    def Field(*args, **kwargs):
-        if "default_factory" in kwargs:
-            return kwargs["default_factory"]()
-        return kwargs.get("default", None)
+from pydantic import BaseModel, Field, field_validator
 
 
 NCNAME_REGEX = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.-]*$")

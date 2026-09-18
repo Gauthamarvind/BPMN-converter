@@ -20,6 +20,7 @@ class LLMConfig:
     model: str = os.getenv("LLM_MODEL", "llama3")
     base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
     api_key: str = os.getenv("LLM_API_KEY", "ollama")
+    auth_header: str = os.getenv("LLM_AUTH_HEADER", "Authorization")
     context_tokens: int = int(os.getenv("LLM_CONTEXT_TOKENS", "8192"))
     max_output_tokens: int = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "4096"))
     temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))

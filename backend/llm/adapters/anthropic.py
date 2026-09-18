@@ -5,10 +5,11 @@ Supports Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku.
 
 from __future__ import annotations
 import json
-import httpx
 from typing import List, Dict, Any, Optional, Tuple
+
 from backend.llm.base import LLMProvider
 from backend.llm.structured import strip_markdown_fences
+from backend.llm.adapters._http import post_json
 
 
 class AnthropicAdapter(LLMProvider):
@@ -30,6 +31,7 @@ class AnthropicAdapter(LLMProvider):
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
+        self.provider = "anthropic"
 
     def complete(
         self,
@@ -58,42 +60,41 @@ class AnthropicAdapter(LLMProvider):
 
         payload: Dict[str, Any] = {
             "model": self.model,
+            "messages": user_assistant_messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "messages": user_assistant_messages,
         }
         if system_content.strip():
             payload["system"] = system_content.strip()
 
+        data = post_json(
+            endpoint=self.endpoint,
+            headers=headers,
+            payload=payload,
+            timeout=self.timeout,
+            provider=self.provider,
+            model=self.model,
+        )
+
+        content_blocks = data.get("content", [])
+        raw_text = ""
+        for b in content_blocks:
+            if b.get("type") == "text":
+                raw_text += b.get("text", "")
+        raw_text = raw_text.strip()
+
+        usage_info = data.get("usage", {})
+        usage = {
+            "prompt_tokens": usage_info.get("input_tokens", 0),
+            "completion_tokens": usage_info.get("output_tokens", 0),
+            "total_tokens": usage_info.get("input_tokens", 0) + usage_info.get("output_tokens", 0),
+        }
+
+        parsed_json = None
+        cleaned = strip_markdown_fences(raw_text)
         try:
-            with httpx.Client(timeout=self.timeout) as client:
-                resp = client.post(self.endpoint, headers=headers, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-
-            # Anthropic response: {content: [{type: 'text', text: '...'}]}
-            content_blocks = data.get("content", [])
-            raw_text = "".join(b.get("text", "") for b in content_blocks if b.get("type") == "text").strip()
-
-            usage_info = data.get("usage", {})
-            usage = {
-                "prompt_tokens": usage_info.get("input_tokens", 0),
-                "completion_tokens": usage_info.get("output_tokens", 0),
-                "total_tokens": usage_info.get("input_tokens", 0) + usage_info.get("output_tokens", 0),
-            }
-
+            parsed_json = json.loads(cleaned)
+        except Exception:
             parsed_json = None
-            cleaned = strip_markdown_fences(raw_text)
-            try:
-                parsed_json = json.loads(cleaned)
-            except Exception:
-                parsed_json = None
 
-            return parsed_json, raw_text, usage
-
-        except httpx.HTTPError as he:
-            err_msg = f"Anthropic API error: {str(he)}"
-            return None, err_msg, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        except Exception as ex:
-            err_msg = f"Unexpected Anthropic connection error: {str(ex)}"
-            return None, err_msg, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        return parsed_json, raw_text, usage

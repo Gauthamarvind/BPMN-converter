@@ -2,27 +2,19 @@
 Application-Side Structured Output Validator & Self-Healing Engine.
 Strips fences, parses JSON, validates against Pydantic schema,
 and on validation failure retries with errors fed back (max 3 attempts).
+Raises only LLMValidationError after max_attempts and lets adapter LLMErrors propagate.
 """
 
 from __future__ import annotations
 import json
 import logging
 import re
-import sys
 from typing import Optional, Dict, Any, Tuple, Type
 from pathlib import Path
 
 from backend.ir.models import ProcessIR
 from backend.llm.base import LLMProvider
-from backend.llm.errors import (
-    LLMError,
-    LLMConnectionError,
-    LLMAuthenticationError,
-    LLMRateLimitError,
-    LLMResponseError,
-    LLMEmptyResponseError,
-    LLMValidationError,
-)
+from backend.llm.errors import LLMValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +23,7 @@ def strip_markdown_fences(text: str) -> str:
     """Removes ```json or ``` code fences and trims whitespace."""
     if not text:
         return ""
-    
+
     # Check for markdown code block
     match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
     if match:
@@ -84,11 +76,14 @@ def extract_with_self_healing(
 ) -> Tuple[ProcessIR, Dict[str, Any]]:
     """
     Executes an extraction prompt with up to 3 retry attempts feeding validation errors back.
-    Logs each stage and raises specific LLM errors on transport or schema failure.
+    Lets adapter LLMErrors propagate and raises LLMValidationError on validation exhaustion.
     """
+    provider_name = getattr(provider, "provider", provider.__class__.__name__)
+    model_name = getattr(provider, "model", None)
+
     logger.info(
-        f"[Process2BPMN LLM] Starting structured extraction with provider={provider.__class__.__name__}, "
-        f"max_attempts={max_attempts}, temperature={temperature}"
+        f"[Process2BPMN LLM] Starting structured extraction with provider={provider_name}, "
+        f"model={model_name}, max_attempts={max_attempts}, temperature={temperature}"
     )
 
     messages = [
@@ -122,32 +117,12 @@ def extract_with_self_healing(
         for k in total_usage:
             total_usage[k] += usage.get(k, 0)
 
-        # 1. Check for authentication failures
-        if any(auth_kw in last_raw_text.lower() for auth_kw in ["401 unauthorized", "invalid api key", "api_key_invalid", "unauthenticated", "invalid_api_key"]):
-            logger.error(f"[Process2BPMN LLM] Authentication failed on attempt {attempt}: {last_raw_text}")
-            raise LLMAuthenticationError(f"LLM authentication failed: {last_raw_text}")
-
-        # 2. Check for rate limit / quota exhaustion
-        if any(rl_kw in last_raw_text.lower() for rl_kw in ["429", "rate limit", "quota exceeded", "resource has been exhausted", "too many requests"]):
-            logger.error(f"[Process2BPMN LLM] Rate limit / quota exceeded on attempt {attempt}: {last_raw_text}")
-            raise LLMRateLimitError(f"LLM rate limit exceeded: {last_raw_text}")
-
-        # 3. Check for transport / connection errors
-        if any(conn_kw in last_raw_text for conn_kw in ["Connection refused", "ConnectError", "NameResolutionError", "Could not resolve host", "timed out", "TimeoutException"]):
-            logger.error(f"[Process2BPMN LLM] Connection failed on attempt {attempt}: {last_raw_text}")
-            raise LLMConnectionError(f"LLM endpoint connection failed: {last_raw_text}")
-
-        # 4. Check for generic API errors
-        if any(err_kw in last_raw_text for err_kw in ["API error:", "Unexpected connection error:"]):
-            logger.error(f"[Process2BPMN LLM] Provider error on attempt {attempt}: {last_raw_text}")
-            raise LLMResponseError(f"LLM provider error: {last_raw_text}")
-
-        # 5. Check if completion is completely empty
+        # Check if completion is completely empty
         if not last_raw_text.strip():
             last_error = "Empty response received from LLM."
             logger.warning(f"[Process2BPMN LLM] Attempt {attempt}/{max_attempts} received empty response.")
         else:
-            # 6. Attempt JSON parse and Pydantic schema validation
+            # Attempt JSON parse and Pydantic schema validation
             instance, error_msg = parse_and_validate_json(last_raw_text, ProcessIR)
             if instance is not None:
                 logger.info(
@@ -186,7 +161,9 @@ def extract_with_self_healing(
         f"Last error: {last_error}"
     )
     raise LLMValidationError(
-        message=f"Failed to generate valid Process IR after {max_attempts} attempts. Last error: {last_error}\nResponse was:\n{last_raw_text[:500]}",
+        message=f"Failed to generate valid Process IR after {max_attempts} attempts. Last error: {last_error}",
+        provider=provider_name,
+        model=model_name,
         last_raw_output=last_raw_text,
         attempts=max_attempts,
         last_error=last_error

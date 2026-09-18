@@ -2,6 +2,7 @@
 Unified Ingestion Engine.
 Parses transcripts (.txt, .md, .vtt, .srt), documents (.docx, .pdf),
 and spreadsheets (.xlsx, .csv) into normalized text and structured tables.
+Raises IngestionError on corrupt files, empty text, or unreadable PDFs.
 """
 
 from __future__ import annotations
@@ -11,6 +12,11 @@ import csv
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple, Union
+
+
+class IngestionError(Exception):
+    """Raised when document ingestion fails due to corrupt files, unreadable formats, or empty content."""
+    pass
 
 
 @dataclass
@@ -26,10 +32,10 @@ def clean_vtt_srt(content: str) -> str:
     """Strips timestamps, sequence numbers, and formatting from VTT / SRT files."""
     lines = content.splitlines()
     cleaned_lines = []
-    
+
     # Regex to match timestamps like "00:01:20.000 --> 00:01:23.000" or "00:01:20,000 --> 00:01:23,000"
     timestamp_pattern = re.compile(r"\d{1,2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{1,2}:\d{2}:\d{2}[.,]\d{3}")
-    
+
     for line in lines:
         stripped = line.strip()
         if not stripped:
@@ -40,7 +46,7 @@ def clean_vtt_srt(content: str) -> str:
             continue
         if timestamp_pattern.search(stripped):
             continue
-        
+
         # Strip XML-like tags e.g. <v Speaker> or <c.color>
         speaker_match = re.search(r"<v\s+([^>]+)>", stripped)
         if speaker_match:
@@ -49,7 +55,7 @@ def clean_vtt_srt(content: str) -> str:
             stripped = f"{speaker}: {text.strip()}"
         else:
             stripped = re.sub(r"<[^>]+>", "", stripped)
-            
+
         cleaned_lines.append(stripped)
 
     return "\n".join(cleaned_lines)
@@ -70,23 +76,24 @@ def parse_csv_content(content: str) -> Tuple[str, List[Dict[str, Any]]]:
 
     f.seek(0)
     reader = csv.reader(f, delimiter=delimiter)
-    rows = [r for r in reader if any(cell.strip() for cell in r)]
+    rows = list(reader)
     if not rows:
         return "", []
 
-    header = [h.strip() for h in rows[0]]
+    header = [c.strip() for c in rows[0]]
     column_mapping = detect_column_roles(header)
 
     structured_rows = []
-    text_lines = [f"Table Columns: {', '.join(header)}"]
+    text_lines = [f"=== CSV Process Table ===", f"Columns: {', '.join(header)}"]
 
-    for row_idx, row in enumerate(rows[1:], start=1):
+    for row_idx, r in enumerate(rows[1:], start=1):
+        if not any(cell.strip() for cell in r):
+            continue
         row_dict = {}
         text_parts = []
-        for col_idx, cell in enumerate(row):
+        for col_idx, cell in enumerate(r):
             val = cell.strip()
-            col_name = header[col_idx] if col_idx < len(header) else f"Col_{col_idx}"
-            standard_role = column_mapping.get(col_idx, col_name)
+            standard_role = column_mapping.get(col_idx, header[col_idx] if col_idx < len(header) else f"col_{col_idx}")
             row_dict[standard_role] = val
             if val:
                 text_parts.append(f"{standard_role}: {val}")
@@ -131,7 +138,7 @@ def parse_xlsx_bytes(data: bytes) -> Tuple[str, List[List[Dict[str, Any]]]]:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
     except Exception as ex:
-        return f"Failed to parse Excel workbook: {str(ex)}", []
+        raise IngestionError(f"Corrupt or invalid Excel workbook: {str(ex)}") from ex
 
     all_text = []
     all_tables = []
@@ -177,7 +184,7 @@ def parse_docx_bytes(data: bytes) -> Tuple[str, List[List[Dict[str, Any]]]]:
         import docx
         doc = docx.Document(io.BytesIO(data))
     except Exception as ex:
-        return f"Failed to parse DOCX document: {str(ex)}", []
+        raise IngestionError(f"Corrupt or invalid Word document: {str(ex)}") from ex
 
     lines = []
     # Extract paragraphs
@@ -234,9 +241,13 @@ def parse_pdf_bytes(data: bytes) -> str:
             text = page.extract_text() or ""
             if text.strip():
                 pages_text.append(f"--- Page {i + 1} ---\n{text.strip()}")
+        if not pages_text:
+            raise IngestionError("PDF document contains no extractable text.")
         return "\n\n".join(pages_text)
+    except IngestionError:
+        raise
     except Exception as ex:
-        return f"Failed to parse PDF document: {str(ex)}"
+        raise IngestionError(f"Corrupt or invalid PDF document: {str(ex)}") from ex
 
 
 def ingest_file(
@@ -245,6 +256,7 @@ def ingest_file(
 ) -> IngestedDocument:
     """
     Main ingestion dispatcher. Normalizes any input format into structured process text.
+    Raises IngestionError if document is corrupt or has empty content.
     """
     ext = Path(filename).suffix.lower()
     meta = {"source_filename": filename, "format": ext}
@@ -275,6 +287,9 @@ def ingest_file(
         # Fallback raw text decoding
         raw_text = content.decode("utf-8", errors="ignore") if isinstance(content, bytes) else str(content)
         normalized = raw_text.strip()
+
+    if not normalized or not normalized.strip():
+        raise IngestionError(f"Ingested document '{filename}' is empty or contains no readable text.")
 
     return IngestedDocument(
         filename=filename,

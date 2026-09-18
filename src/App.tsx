@@ -161,13 +161,16 @@ export default function App() {
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         const errMsg = errData.detail || errData.error || `Conversion failed (${res.status})`;
+        const kind = errData.kind || (res.status === 502 ? 'LLMError' : res.status === 401 ? 'LLMAuthenticationError' : 'Error');
+        const prov = errData.provider || settings.provider || 'Provider';
+        const mdl = errData.model || settings.model || 'Model';
 
-        if (res.status === 502 || errMsg.toLowerCase().includes('llm')) {
+        if (res.status === 502 || res.status === 401 || res.status === 400 || errMsg.toLowerCase().includes('llm')) {
           setToast({
             id: String(Date.now()),
             type: 'error',
-            title: 'LLM Gateway Error (502)',
-            message: `${settings.provider} / ${settings.model}: ${errMsg}`,
+            title: `[${kind}] ${prov} / ${mdl}`,
+            message: errMsg,
             action: {
               label: 'Open Settings',
               onClick: () => setIsSettingsOpen(true),
@@ -243,13 +246,16 @@ export default function App() {
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         const errMsg = errData.detail || errData.error || `Upload failed (${res.status})`;
+        const kind = errData.kind || (res.status === 502 ? 'LLMError' : res.status === 401 ? 'LLMAuthenticationError' : 'Error');
+        const prov = errData.provider || settings.provider || 'Provider';
+        const mdl = errData.model || settings.model || 'Model';
 
-        if (res.status === 502) {
+        if (res.status === 502 || res.status === 401 || res.status === 400 || errMsg.toLowerCase().includes('llm')) {
           setToast({
             id: String(Date.now()),
             type: 'error',
-            title: 'LLM Gateway Error (502)',
-            message: `${settings.provider} / ${settings.model}: ${errMsg}`,
+            title: `[${kind}] ${prov} / ${mdl}`,
+            message: errMsg,
             action: {
               label: 'Open Settings',
               onClick: () => setIsSettingsOpen(true),
