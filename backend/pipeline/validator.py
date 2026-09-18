@@ -1,7 +1,11 @@
 """
 Deterministic Process IR Validator and Graph Repair Engine.
-Enforces NCName identifier rules, start/end event guarantees, reachability traversal,
-gateway branching conditions, and parallel split-join pairing.
+
+Auto-fixes (INFO/WARNING, never block export): NCName identifier sanitising, missing
+start/end events, lane assignment, dangling or self-looping flows, unknown element types.
+Blocking errors (ERROR, export_blocked=True): unreachable nodes and exclusive/inclusive
+gateways with unlabeled branches. Warnings that do not block: implicit splits (a task
+with several outgoing flows) and unbalanced parallel gateways.
 """
 
 from __future__ import annotations
@@ -92,7 +96,11 @@ class ProcessValidator:
         # 7. Gateway validation: conditions on multi-outgoing, default flows
         self._validate_gateways()
 
-        # 8. Reachability graph check
+        # 8. Non-blocking modelling warnings: implicit splits, unbalanced parallel gateways
+        self._warn_implicit_splits()
+        self._warn_parallel_pairing()
+
+        # 9. Reachability graph check
         self._check_reachability()
 
         if any(iss.severity == "ERROR" for iss in self.issues):
@@ -395,6 +403,75 @@ class ProcessValidator:
                             topic="Gateway Branching",
                             question=f"Gateway '{elem.name or elem.id}' ({elem.id}) has unlabeled outgoing branches. What condition triggers each branch?"
                         ))
+
+    def _warn_implicit_splits(self) -> None:
+        """
+        A task/event with more than one outgoing sequence flow is legal BPMN but almost
+        always an extraction artefact (the model forgot the gateway). Flag it so the
+        person can confirm whether it is an exclusive decision or a parallel split.
+        """
+        outgoing: Dict[str, List[SequenceFlow]] = {}
+        for f in self.ir.flows:
+            if f.type != "message":
+                outgoing.setdefault(f.sourceId, []).append(f)
+        for elem in self.ir.elements:
+            if "Gateway" in elem.type or "gateway" in elem.type.lower():
+                continue
+            if elem.type == "endEvent":
+                continue
+            outs = outgoing.get(elem.id, [])
+            if len(outs) > 1:
+                self.issues.append(ValidationIssue(
+                    severity="WARNING",
+                    message=(
+                        f"'{elem.name or elem.id}' ({elem.id}) has {len(outs)} outgoing flows without a gateway "
+                        f"(implicit parallel split). Insert an exclusive or parallel gateway if only one path should run."
+                    ),
+                    element_id=elem.id,
+                    auto_fixed=False
+                ))
+
+    def _warn_parallel_pairing(self) -> None:
+        """
+        Parallel splits (one in, many out) should be matched by parallel joins (many in,
+        one out). An unbalanced count means tokens will never synchronise in an engine
+        such as Camunda; reported as a WARNING because analytic diagrams tolerate it.
+        """
+        incoming: Dict[str, int] = {e.id: 0 for e in self.ir.elements}
+        outgoing: Dict[str, int] = {e.id: 0 for e in self.ir.elements}
+        for f in self.ir.flows:
+            if f.sourceId in outgoing:
+                outgoing[f.sourceId] += 1
+            if f.targetId in incoming:
+                incoming[f.targetId] += 1
+
+        splits: List[FlowNode] = []
+        joins: List[FlowNode] = []
+        for elem in self.ir.elements:
+            if elem.type != "parallelGateway":
+                continue
+            if outgoing[elem.id] > 1:
+                splits.append(elem)
+            elif incoming[elem.id] > 1:
+                joins.append(elem)
+            else:
+                self.issues.append(ValidationIssue(
+                    severity="WARNING",
+                    message=f"Parallel gateway '{elem.name or elem.id}' ({elem.id}) neither splits nor joins (one in, one out).",
+                    element_id=elem.id,
+                    auto_fixed=False
+                ))
+        if len(splits) != len(joins):
+            ids = ", ".join(g.id for g in (splits if len(splits) > len(joins) else joins))
+            self.issues.append(ValidationIssue(
+                severity="WARNING",
+                message=(
+                    f"Unbalanced parallel gateways: {len(splits)} split(s) vs {len(joins)} join(s) ({ids}). "
+                    f"Every parallel split should be closed by a parallel join before the process ends."
+                ),
+                element_id=splits[0].id if splits else (joins[0].id if joins else ""),
+                auto_fixed=False
+            ))
 
     def _reachable_ids(self) -> Set[str]:
         """Returns the ids of every element reachable from a start event (all ids if there is none)."""

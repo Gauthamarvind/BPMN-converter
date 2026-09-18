@@ -164,13 +164,18 @@ class LaneMapper:
         )
 
         try:
-            response_text, _ = provider.generate(
-                prompt=user_content,
-                system_instruction="You are a BPMN 2.0 system expert. Respond ONLY with valid JSON.",
-                temperature=0.0
+            # LLMProvider exposes complete(messages) only; the old generate() call never existed
+            # on any adapter, so this branch silently returned nothing.
+            _, response_text, _ = provider.complete(
+                messages=[
+                    {"role": "system", "content": "You are a BPMN 2.0 system expert. Respond ONLY with valid JSON."},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.0,
+                max_tokens=1024,
             )
             # Clean possible markdown block
-            clean = response_text.strip()
+            clean = (response_text or "").strip()
             if clean.startswith("```json"):
                 clean = clean[7:]
             if clean.startswith("```"):

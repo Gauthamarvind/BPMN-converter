@@ -110,6 +110,12 @@ export const SettingsSheet: React.FC<SettingsSheetProps> = ({
               No API key in .env — set LLM_API_KEY and restart, or enter a key below for this session.
             </div>
           )}
+          {serverConfig && serverConfig.client_llm_overrides === false && (
+            <div className="text-[var(--text-secondary-color)] pt-1">
+              This deployment uses the server's model for everyone; provider, model, endpoint and key
+              overrides entered here are ignored (only "Rule engine" still applies).
+            </div>
+          )}
         </div>
 
         <Select

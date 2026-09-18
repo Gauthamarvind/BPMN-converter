@@ -23,20 +23,31 @@ MAX_BPMN_FILE_SIZE = 15 * 1024 * 1024  # 15MB
 
 def parse_safe_xml(xml_content: str) -> ET.Element:
     """
-    Safely parses XML content preventing XXE (XML External Entity) attacks and entity expansions.
+    Safely parses XML content.
+
+    Any DOCTYPE / entity declaration is rejected outright: BPMN files never need one, and
+    internal entity expansion ("billion laughs") is as much a denial-of-service vector as
+    external entities are an exfiltration one. Parsing goes through ``defusedxml`` when it
+    is installed (it is in requirements.txt); the DOCTYPE pre-check keeps the guarantee
+    even if the dependency is missing.
     """
     if len(xml_content.encode("utf-8")) > MAX_BPMN_FILE_SIZE:
         raise ValueError(f"File exceeds maximum allowed size of {MAX_BPMN_FILE_SIZE // (1024 * 1024)}MB")
 
-    # Reject dangerous DOCTYPE and ENTITY declarations
-    if "<!DOCTYPE" in xml_content or "<!ENTITY" in xml_content:
-        # Check if contains SYSTEM or PUBLIC external entities
-        if re.search(r'<!ENTITY\s+[^>]+(SYSTEM|PUBLIC)', xml_content, re.IGNORECASE):
-            raise ValueError("Security violation: External entities are forbidden in BPMN templates (XXE protection)")
+    head = xml_content[:4096].lstrip("\ufeff \t\r\n")
+    if not head.startswith("<"):
+        raise ValueError("Not an XML document")
+    if re.search(r"<!\s*(DOCTYPE|ENTITY)", xml_content, re.IGNORECASE):
+        raise ValueError(
+            "Security violation: DOCTYPE and ENTITY declarations are not allowed in BPMN templates "
+            "(XXE / entity-expansion protection)"
+        )
 
-    # Parse with standard ElementTree without external resolution
-    parser = ET.XMLParser()
-    return ET.fromstring(xml_content, parser=parser)
+    try:
+        from defusedxml.ElementTree import fromstring as safe_fromstring  # type: ignore
+        return safe_fromstring(xml_content, forbid_dtd=True, forbid_entities=True, forbid_external=True)
+    except ImportError:
+        return ET.fromstring(xml_content, parser=ET.XMLParser())
 
 
 class BpmnTemplateParser:

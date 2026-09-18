@@ -40,6 +40,15 @@ template_storage = TemplateStorage()
 linter = ProfileLinter()
 
 
+class ExportBlockedError(Exception):
+    """Raised in strict mode when the repaired process still has ERROR-level issues."""
+
+    def __init__(self, message: str, issues: Optional[list] = None, open_questions: Optional[list] = None):
+        super().__init__(message)
+        self.issues = issues or []
+        self.open_questions = open_questions or []
+
+
 def process_pipeline(
     raw_content: bytes,
     filename: str,
@@ -50,7 +59,9 @@ def process_pipeline(
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
     template_id: Optional[str] = None,
-    lane_map: Optional[Dict[str, str]] = None
+    lane_map: Optional[Dict[str, str]] = None,
+    strict: bool = False,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Executes the end-to-end Process2BPMN conversion pipeline.
@@ -66,6 +77,9 @@ def process_pipeline(
         api_key: LLM API key override.
         template_id: Optional BPMN reference template identifier.
         lane_map: Optional explicit mapping of actor names to template lane IDs.
+        strict: When True, raise ExportBlockedError instead of returning XML for a process
+            with blocking validation errors (API/CLI consumers that must not receive an
+            unreviewed diagram). The UI leaves this False so it can show what is wrong.
 
     Returns:
         Dict containing bpmn_xml, IR dictionary, validation issues, lint results, template info, and metadata.
@@ -76,6 +90,9 @@ def process_pipeline(
     """
     title = Path(filename).stem.replace("_", " ").title()
     ext = Path(filename).suffix.lower()
+    # "provider=mock" and "mock=true" are the same request: one rule engine, one code path.
+    effective_provider = (provider_name or config.llm.provider or "").strip().lower()
+    mock = bool(mock) or effective_provider == "mock"
     logger.info(f"[ProcessPipeline] Starting conversion for '{filename}' (profile={profile_name}, mock={mock})")
 
     # 1. Pipeline Hook: Check if file is a structured document template via signature detection
@@ -143,6 +160,8 @@ def process_pipeline(
         lane_map=lane_map,
         extraction_meta=extraction_meta,
         normalized_text=doc.normalized_text if doc else "",
+        strict=strict,
+        user_id=user_id,
     )
 
 
@@ -155,6 +174,8 @@ def render_ir(
     lane_map: Optional[Dict[str, str]] = None,
     extraction_meta: Optional[Dict[str, Any]] = None,
     normalized_text: str = "",
+    strict: bool = False,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Stages 3-8 of the pipeline: validate/repair an existing Process IR, bind an optional
@@ -184,7 +205,9 @@ def render_ir(
     template_info = None
 
     if template_id:
-        record = template_storage.get_template(template_id)
+        record = template_storage.get_template(template_id, user_id=user_id)
+        if not record:
+            raise ValueError(f"Template '{template_id}' was not found or is not available to you.")
         if record:
             meta, template_raw_xml, template_spec = record
             if not lane_map:
@@ -262,6 +285,13 @@ def render_ir(
     export_blocked = validator.export_blocked or any(iss.get("severity") == "ERROR" for iss in issues)
 
     logger.info(f"[ProcessPipeline] Conversion successful for '{filename}'. Generated {len(bpmn_xml)} bytes XML. export_blocked={export_blocked}")
+
+    if strict and export_blocked:
+        raise ExportBlockedError(
+            "The process has blocking validation errors; export refused in strict mode.",
+            issues=[iss for iss in issues if iss.get("severity") == "ERROR"],
+            open_questions=[q.model_dump() for q in repaired_ir.openQuestions],
+        )
 
     return {
         "success": True,

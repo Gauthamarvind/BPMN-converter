@@ -26,6 +26,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body, Respon
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from backend.config import config
@@ -48,7 +49,19 @@ from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import BpmnSchemaError, BpmnSchemaConfigurationError
 from backend.pipeline.linter import ProfileLinter
-from backend.pipeline.process_pipeline import process_pipeline, render_ir
+from backend.pipeline.process_pipeline import process_pipeline, render_ir, ExportBlockedError
+from backend.pipeline.xsd_validator import validate_bpmn
+from backend.security import (
+    security,
+    AuthMiddleware,
+    current_user,
+    client_key,
+    rate_limiter,
+    extraction_slot,
+    ExtractionSlot,
+    validate_base_url,
+    LOCAL_USER,
+)
 from backend.pipeline.mock_extractor import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
 from backend.templates.doc_parser import DocTemplateParser
@@ -68,14 +81,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS: the SPA is served from this same origin (or proxied by Vite in dev), so no
+# cross-origin access is needed by default. Set CORS_ALLOW_ORIGINS=https://a.example,https://b.example
+# to allow other front-ends. "*" together with credentials is never sent (browsers reject it).
+if security.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=security.cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+
+# Authentication / identity (APP_AUTH_MODE=none|proxy|token, see backend/security.py)
+app.add_middleware(AuthMiddleware)
 
 linter = ProfileLinter()
 
@@ -183,6 +202,38 @@ async def row_validation_error_handler(request: Request, exc: RowValidationError
     )
 
 
+@app.exception_handler(ExportBlockedError)
+async def export_blocked_handler(request: Request, exc: ExportBlockedError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": str(exc),
+            "detail": str(exc),
+            "kind": "ExportBlockedError",
+            "export_blocked": True,
+            "validation_issues": exc.issues,
+            "open_questions": exc.open_questions,
+        }
+    )
+
+
+@app.exception_handler(ExtractionSlot.BusyError)
+async def busy_handler(request: Request, exc: ExtractionSlot.BusyError):
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "15"},
+        content={"error": str(exc), "detail": str(exc), "kind": "ServerBusy"}
+    )
+
+
+@app.exception_handler(PermissionError)
+async def permission_error_handler(request: Request, exc: PermissionError):
+    return JSONResponse(
+        status_code=403,
+        content={"error": str(exc) or "Forbidden", "detail": str(exc) or "Forbidden", "kind": "Forbidden"}
+    )
+
+
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
     if isinstance(exc, (LLMConnectionError, LLMResponseError, LLMRateLimitError, LLMValidationError)):
@@ -212,6 +263,7 @@ class ConvertTextRequest(BaseModel):
     mock: Optional[bool] = False
     template_id: Optional[str] = None
     lane_map: Optional[Dict[str, str]] = None
+    strict: Optional[bool] = False
 
 
 class MapLanesRequest(BaseModel):
@@ -236,6 +288,25 @@ class RenderRequest(BaseModel):
     template_id: Optional[str] = None
     lane_map: Optional[Dict[str, str]] = None
     filename: str = "process.bpmn"
+    strict: Optional[bool] = False
+
+
+class BulkExportRequest(BaseModel):
+    process_name: Optional[str] = "process"
+    ir: Dict[str, Any]
+    template_id: Optional[str] = None
+    lane_map: Optional[Dict[str, str]] = None
+    svg: Optional[str] = None
+    png_base64: Optional[str] = None
+    profiles: Optional[List[str]] = None
+
+
+class BpmnExportRequest(BaseModel):
+    ir: Dict[str, Any]
+    profile: str = "generic"
+    template_id: Optional[str] = None
+    lane_map: Optional[Dict[str, str]] = None
+    process_name: Optional[str] = "process"
 
 
 class LLMPingRequest(BaseModel):
@@ -243,6 +314,40 @@ class LLMPingRequest(BaseModel):
     model: Optional[str] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
+
+
+def _llm_overrides(request: Request, provider: Optional[str], model: Optional[str],
+                   base_url: Optional[str], api_key: Optional[str]):
+    """
+    Applies the deployment policy to per-request model settings.
+    - base_url is always validated against the SSRF rules (private ranges, metadata hosts, allowlist).
+    - With ALLOW_CLIENT_LLM_OVERRIDES=false, everything except provider=mock is ignored and the
+      server's .env configuration is used (the org pays with one key, users cannot redirect calls).
+    """
+    provider = (provider or "").strip() or None
+    if not security.allow_client_llm_overrides:
+        return (provider if provider == "mock" else None), None, None, None
+    try:
+        base_url = validate_base_url(base_url)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=f"Rejected base_url: {ex}")
+    return provider, (model or None), base_url, (api_key or None)
+
+
+def _throttle(request: Request) -> None:
+    allowed, retry_after = rate_limiter.check(client_key(request))
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded ({security.rate_limit_per_minute}/min). Retry in {retry_after}s.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def _convert_guarded(**kwargs):
+    """Runs the pipeline inside an extraction slot so a burst of uploads cannot exhaust the server."""
+    with extraction_slot:
+        return process_pipeline(**kwargs)
 
 
 def _mask(value: str) -> str:
@@ -253,25 +358,34 @@ def _mask(value: str) -> str:
 
 @app.get("/api/health")
 def health_check():
-    """Reports the LLM configuration the server loaded from .env (the key itself is never returned)."""
+    """
+    Liveness + the model configuration the UI needs to label its "model pill".
+    The API key itself is never returned. On a shared deployment (APP_AUTH_MODE != none)
+    the endpoint is public, so the base URL and key hint are withheld unless
+    EXPOSE_SERVER_CONFIG=true.
+    """
     key = config.llm.api_key or ""
     placeholder_keys = ("", "ollama", "dummy", "your-api-key", "changeme")
-    return {
+    key_set = key.strip().lower() not in placeholder_keys
+    payload = {
         "status": "healthy",
         "service": "Process2BPMN",
         "version": VERSION,
+        "auth_mode": security.auth_mode,
+        "client_llm_overrides": security.allow_client_llm_overrides,
         "active_provider": config.llm.provider,
         "active_model": config.llm.model,
-        "base_url": config.llm.base_url,
-        "api_key_set": key.strip().lower() not in placeholder_keys,
-        "api_key_hint": _mask(key) if key.strip().lower() not in placeholder_keys else "",
+        "base_url": config.llm.base_url if security.expose_server_config else "",
+        "api_key_set": key_set,
+        "api_key_hint": _mask(key) if (key_set and security.expose_server_config) else "",
         "context_tokens": config.llm.context_tokens,
         "single_pool": config.single_pool,
     }
+    return payload
 
 
 @app.post("/api/llm/ping")
-def llm_ping(req: LLMPingRequest):
+def llm_ping(req: LLMPingRequest, request: Request):
     """
     Cheap connectivity test for the active (or overridden) model: one tiny completion.
     Never raises for LLM problems; returns ok=false with the typed error so the UI can show it.
@@ -282,11 +396,12 @@ def llm_ping(req: LLMPingRequest):
                 "note": "Mock mode never calls a model; text inputs use the rule engine."}
     started = time.time()
     try:
+        p_name, p_model, p_url, p_key = _llm_overrides(request, req.provider, req.model, req.base_url, req.api_key)
         prov = get_llm_provider(
-            provider_name=req.provider or None,
-            base_url=req.base_url or None,
-            api_key=req.api_key or None,
-            model=req.model or None,
+            provider_name=p_name,
+            base_url=p_url,
+            api_key=p_key,
+            model=p_model,
         )
         _, raw_text, usage = prov.complete(
             [{"role": "user", "content": "Reply with the single word OK."}],
@@ -301,6 +416,8 @@ def llm_ping(req: LLMPingRequest):
             "reply": (raw_text or "")[:40],
             "tokens": usage.get("total_tokens", 0) if isinstance(usage, dict) else 0,
         }
+    except HTTPException:
+        raise
     except LLMError as ex:
         return {
             "ok": False,
@@ -322,7 +439,7 @@ def llm_ping(req: LLMPingRequest):
 
 
 @app.post("/api/render")
-def render_from_ir(req: RenderRequest):
+def render_from_ir(req: RenderRequest, request: Request):
     """
     Re-runs validation, template binding, lint, layout and serialization on an existing IR.
     Lets the UI switch target tool, template or lane mapping without calling the model again.
@@ -335,6 +452,8 @@ def render_from_ir(req: RenderRequest):
         mock=True,  # never call a model here; lane mapping falls back to name matching
         template_id=req.template_id,
         lane_map=req.lane_map,
+        strict=bool(req.strict),
+        user_id=current_user(request),
     )
 
 
@@ -450,10 +569,42 @@ def download_sample_file(filename: str):
 # =========================================================================
 
 @app.get("/api/templates")
-def list_templates():
-    """Lists all stored reference and document templates."""
-    templates = template_storage.list_templates()
+def list_templates(request: Request):
+    """Lists built-in templates plus the caller's own uploads."""
+    templates = template_storage.list_templates(user_id=current_user(request))
     return {"templates": [t.model_dump() for t in templates]}
+
+
+async def _register_template(request: Request, file: UploadFile, name: Optional[str], description: Optional[str]):
+    raw_bytes = await file.read()
+    if len(raw_bytes) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(status_code=413, detail="Template exceeds the upload size limit.")
+    raw_xml = raw_bytes.decode("utf-8", errors="ignore")
+    try:
+        meta, report = template_storage.save_template(
+            xml_content=raw_xml,
+            filename=file.filename or "template.bpmn",
+            name=name,
+            description=description or "",
+            owner_id=current_user(request) if current_user(request) != LOCAL_USER else "",
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=f"Template indexing error: {ex}")
+    except Exception as ex:
+        logger.exception("Template registration failed")
+        raise HTTPException(status_code=400, detail=f"Template indexing error: {ex}")
+    return {"success": True, "template": meta.model_dump(), "report": report.model_dump()}
+
+
+@app.post("/api/templates")
+async def register_template(
+    request: Request,
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+):
+    """Uploads and indexes a reference BPMN XML template (the route the UI's Template Manager uses)."""
+    return await _register_template(request, file, name, description)
 
 
 @app.get("/api/templates/download-blank")
@@ -479,9 +630,9 @@ def download_blank_template_query(type: str = "xlsx", sample: bool = True):
 
 
 @app.get("/api/templates/{template_id}")
-def get_template(template_id: str):
+def get_template(template_id: str, request: Request):
     """Fetches details, raw XML, and parsed specification for a template."""
-    record = template_storage.get_template(template_id)
+    record = template_storage.get_template(template_id, user_id=current_user(request))
     if not record:
         raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found.")
     meta, raw_xml, spec = record
@@ -492,51 +643,54 @@ def get_template(template_id: str):
     }
 
 
+@app.get("/api/templates/{template_id}/download")
+def download_template(template_id: str, request: Request):
+    """Downloads the reference .bpmn file of a template (link used by the Template Manager)."""
+    record = template_storage.get_template(template_id, user_id=current_user(request))
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found.")
+    meta, raw_xml, _ = record
+    fname = Path(meta.filename).name or f"{template_id}.bpmn"
+    return Response(
+        content=raw_xml,
+        media_type="application/xml; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+    )
+
+
 @app.post("/api/templates/upload")
 async def upload_template(
+    request: Request,
     file: UploadFile = File(...),
-    description: Optional[str] = Form(None)
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
 ):
-    """Uploads and indexes a reference BPMN XML template file."""
-    raw_bytes = await file.read()
-    raw_xml = raw_bytes.decode("utf-8", errors="ignore")
-    try:
-        meta, report = template_storage.save_template(
-            xml_content=raw_xml,
-            filename=file.filename or "template.bpmn",
-            description=description or ""
-        )
-        return {
-            "success": True,
-            "template": meta.model_dump(),
-            "report": report.model_dump()
-        }
-    except Exception as ex:
-        raise HTTPException(status_code=400, detail=f"Template indexing error: {str(ex)}")
+    """Alias of POST /api/templates kept for existing API clients."""
+    return await _register_template(request, file, name, description)
 
 
 @app.delete("/api/templates/{template_id}")
-def delete_template(template_id: str):
-    """Deletes a custom template."""
-    success = template_storage.delete_template(template_id)
+def delete_template(template_id: str, request: Request):
+    """Deletes one of the caller's templates (built-ins cannot be deleted on shared deployments)."""
+    success = template_storage.delete_template(template_id, user_id=current_user(request))
     if not success:
         raise HTTPException(status_code=404, detail="Template not found.")
     return {"success": True}
 
 
 @app.post("/api/templates/{template_id}/default")
-def set_default_template(template_id: str):
-    """Sets a template as the default for matching export profiles."""
-    success = template_storage.set_default(template_id)
+def set_default_template(template_id: str, request: Request):
+    """Sets a template as the caller's default for matching export profiles."""
+    success = template_storage.set_default(template_id, user_id=current_user(request))
     if not success:
         raise HTTPException(status_code=404, detail="Template not found.")
     return {"success": True}
 
 
 @app.post("/api/templates/map-lanes")
-def map_actors_to_lanes(req: MapLanesRequest):
+def map_actors_to_lanes(req: MapLanesRequest, request: Request):
     """Maps extracted process actors/roles to reference template lanes."""
-    record = template_storage.get_template(req.template_id)
+    record = template_storage.get_template(req.template_id, user_id=current_user(request))
     if not record:
         raise HTTPException(status_code=404, detail=f"Template '{req.template_id}' not found.")
     _, _, spec = record
@@ -574,6 +728,7 @@ MAX_UPLOAD_SIZE_BYTES = int(os.environ.get("MAX_UPLOAD_SIZE_BYTES", 20 * 1024 * 
 
 @app.post("/api/convert")
 async def convert_document(
+    request: Request,
     file: Optional[UploadFile] = File(None),
     text: Optional[str] = Form(None),
     filename: Optional[str] = Form("process_input.txt"),
@@ -584,15 +739,16 @@ async def convert_document(
     base_url: Optional[str] = Form(None),
     api_key: Optional[str] = Form(None),
     template_id: Optional[str] = Form(None),
-    lane_map: Optional[str] = Form(None)
+    lane_map: Optional[str] = Form(None),
+    strict: Optional[bool] = Form(False),
 ):
-    import json
+    _throttle(request)
     if file is not None:
         raw_content = await file.read()
-        fname = file.filename or filename or "uploaded_process.txt"
+        fname = Path(file.filename or filename or "uploaded_process.txt").name
     elif text:
         raw_content = text.encode("utf-8")
-        fname = filename or "pasted_process.txt"
+        fname = Path(filename or "pasted_process.txt").name
     else:
         raise HTTPException(status_code=400, detail="Either a file upload or text body must be provided.")
 
@@ -623,36 +779,47 @@ async def convert_document(
         try:
             lane_map_dict = json.loads(lane_map)
         except Exception:
-            pass
+            raise HTTPException(status_code=400, detail="lane_map must be a JSON object of actor -> lane id.")
 
-    return process_pipeline(
+    p_name, p_model, p_url, p_key = _llm_overrides(request, provider, model, base_url, api_key)
+
+    # The pipeline (document parsing + a model round-trip that can take tens of seconds) is
+    # synchronous; running it on the event loop would freeze every other user's request.
+    return await run_in_threadpool(
+        _convert_guarded,
         raw_content=raw_content,
         filename=fname,
         profile_name=profile or "generic",
         mock=mock or False,
-        provider_name=provider,
-        model=model,
-        base_url=base_url,
-        api_key=api_key,
+        provider_name=p_name,
+        model=p_model,
+        base_url=p_url,
+        api_key=p_key,
         template_id=template_id,
-        lane_map=lane_map_dict
+        lane_map=lane_map_dict,
+        strict=bool(strict),
+        user_id=current_user(request),
     )
 
 
 @app.post("/api/convert-json")
-def convert_json_payload(req: ConvertTextRequest):
+def convert_json_payload(req: ConvertTextRequest, request: Request):
+    _throttle(request)
     raw_content = req.text.encode("utf-8")
-    return process_pipeline(
+    p_name, p_model, p_url, p_key = _llm_overrides(request, req.provider, req.model, req.base_url, req.api_key)
+    return _convert_guarded(
         raw_content=raw_content,
-        filename=req.filename or "process_input.txt",
+        filename=Path(req.filename or "process_input.txt").name,
         profile_name=req.profile or "generic",
         mock=req.mock or False,
-        provider_name=req.provider,
-        model=req.model,
-        base_url=req.base_url,
-        api_key=req.api_key,
+        provider_name=p_name,
+        model=p_model,
+        base_url=p_url,
+        api_key=p_key,
         template_id=req.template_id,
-        lane_map=req.lane_map
+        lane_map=req.lane_map,
+        strict=bool(req.strict),
+        user_id=current_user(request),
     )
 
 
@@ -674,83 +841,107 @@ def lint_process(req: LintRequest):
     }
 
 
+SUPPORTED_PROFILES = ["generic", "camunda", "signavio", "celonis", "aris"]
+
+
+def _serialize_profiles(ir_data: Dict[str, Any], profiles: List[str], template_id: Optional[str],
+                        lane_map: Optional[Dict[str, str]], user_id: str, filename: str) -> Dict[str, str]:
+    """
+    Validates/repairs the IR once, then renders one XSD-validated BPMN document per profile
+    through the normal pipeline. Raises ExportBlockedError when the process has blocking
+    errors and BpmnSchemaError if any profile output fails schema validation, so a bundle
+    can never contain an unusable file.
+    """
+    out: Dict[str, str] = {}
+    for p_name in profiles:
+        if p_name not in SUPPORTED_PROFILES:
+            raise HTTPException(status_code=400, detail=f"Unknown profile '{p_name}'. Supported: {', '.join(SUPPORTED_PROFILES)}")
+        ir_obj = ProcessIR.from_dict(ir_data)  # fresh copy: render_ir mutates during repair
+        result = render_ir(
+            ir=ir_obj,
+            filename=filename,
+            profile_name=p_name,
+            mock=True,
+            template_id=template_id,
+            lane_map=lane_map,
+            strict=True,
+            user_id=user_id,
+        )
+        out[p_name] = result["bpmn_xml"]
+    return out
+
+
+@app.post("/api/export/bpmn")
+def export_bpmn(req: BpmnExportRequest, request: Request):
+    """Returns the validated BPMN 2.0 file for one profile; refuses (422) when export is blocked."""
+    xml_by_profile = _serialize_profiles(
+        req.ir, [req.profile], req.template_id, req.lane_map, current_user(request), f"{req.process_name}.bpmn"
+    )
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', req.process_name or "process").lower() or "process"
+    return Response(
+        content=xml_by_profile[req.profile],
+        media_type="application/xml; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}_{req.profile}.bpmn"'}
+    )
+
+
 @app.post("/api/export/bulk")
-def export_bulk_zip(data: Dict[str, Any]):
-    """Accepts process_name, optional ir, optional bpmn_by_profile, svg, png and generates a downloadable ZIP bundle with on-demand multi-profile serialization."""
-    process_name = data.get("process_name", "process")
-    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', process_name).lower()
-    bpmn_by_profile = dict(data.get("bpmn_by_profile") or {})
-    svg_content = data.get("svg")
-    png_base64 = data.get("png_base64")
-    ir_data = data.get("ir")
-    template_id = data.get("template_id")
+def export_bulk_zip(req: BulkExportRequest, request: Request):
+    """
+    Builds the multi-format bundle server-side: one *distinct* BPMN file per vendor profile
+    (each validated against the BPMN 2.0 XSD), plus the SVG/PNG the browser rendered.
+    The export gate applies: a process with blocking validation errors returns 422.
+    """
+    process_name = req.process_name or "process"
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', process_name).lower() or "process"
+    profiles = req.profiles or SUPPORTED_PROFILES
 
-    supported_profiles = ["generic", "camunda", "signavio", "celonis", "aris"]
-
-    # If profiles not all present and IR is provided, re-serialize server-side on-demand
-    if ir_data:
-        try:
-            ir_obj = ProcessIR.from_dict(ir_data)
-            template_spec = None
-            template_raw_xml = None
-            if template_id:
-                record = template_storage.get_template(template_id)
-                if record:
-                    _, template_raw_xml, template_spec = record
-
-            layout_engine = SugiyamaLayoutEngine(ir_obj, template_spec=template_spec)
-            layout = layout_engine.compute_layout()
-
-            for p_name in supported_profiles:
-                if p_name not in bpmn_by_profile:
-                    p_cfg = linter.load_profile(p_name)
-                    if template_spec and template_raw_xml:
-                        p_renderer = BpmnTemplateRenderer(
-                            template_raw_xml=template_raw_xml,
-                            spec=template_spec,
-                            ir=ir_obj,
-                            layout=layout,
-                            profile_config=p_cfg
-                        )
-                        bpmn_by_profile[p_name] = p_renderer.render()
-                    else:
-                        p_serializer = BpmnXmlSerializer(ir_obj, layout, p_cfg)
-                        bpmn_by_profile[p_name] = p_serializer.serialize()
-        except Exception as ser_ex:
-            logger.error(f"[Process2BPMN Bulk Export] Error re-serializing profiles: {ser_ex}")
+    bpmn_by_profile = _serialize_profiles(
+        req.ir, profiles, req.template_id, req.lane_map, current_user(request), f"{safe_name}.bpmn"
+    )
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Write BPMN for each profile
         for prof, xml_str in bpmn_by_profile.items():
             zf.writestr(f"{safe_name}_{prof}.bpmn", xml_str)
 
-        # Write SVG if provided
-        if svg_content:
-            zf.writestr(f"{safe_name}.svg", svg_content)
+        if req.svg:
+            zf.writestr(f"{safe_name}.svg", req.svg)
 
-        # Write PNG if provided
+        png_base64 = req.png_base64
         if png_base64:
             if "," in png_base64:
                 png_base64 = png_base64.split(",", 1)[1]
-            png_bytes = base64.b64decode(png_base64)
-            zf.writestr(f"{safe_name}.png", png_bytes)
+            try:
+                zf.writestr(f"{safe_name}.png", base64.b64decode(png_base64, validate=True))
+            except Exception:
+                raise HTTPException(status_code=400, detail="png_base64 is not valid base64.")
 
-        # Write README manifest
+        manifest = {
+            "processName": process_name,
+            "exportedAt": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            "generator": f"Process2BPMN {VERSION}",
+            "profiles": list(bpmn_by_profile.keys()),
+            "files": [f"{safe_name}_{p}.bpmn" for p in bpmn_by_profile]
+                     + ([f"{safe_name}.svg"] if req.svg else [])
+                     + ([f"{safe_name}.png"] if req.png_base64 else []),
+            "xsdValidated": True,
+        }
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+
         readme = f"""Process2BPMN Complete Process Package
 ===================================
 Process Name: {process_name}
-Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
+Generated: {manifest['exportedAt']}
 
 Files Included:
 """
         for prof in bpmn_by_profile.keys():
-            readme += f"- {safe_name}_{prof}.bpmn : BPMN 2.0 XML ({prof.capitalize()} profile)\n"
-        if svg_content:
+            readme += f"- {safe_name}_{prof}.bpmn : BPMN 2.0 XML tailored for the {prof.capitalize()} profile (XSD validated)\n"
+        if req.svg:
             readme += f"- {safe_name}.svg : Scalable Vector Graphics diagram\n"
-        if png_base64:
+        if req.png_base64:
             readme += f"- {safe_name}.png : High-resolution raster diagram\n"
-
         zf.writestr("README.txt", readme)
 
     zip_buffer.seek(0)
@@ -768,13 +959,17 @@ if dist_dir.exists():
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
+    _dist_root = dist_dir.resolve()
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         if full_path.startswith("api"):
             raise HTTPException(status_code=404, detail="API endpoint not found")
-        target_file = dist_dir / full_path
-        if full_path and target_file.is_file():
-            return FileResponse(target_file)
+        if full_path:
+            target_file = (_dist_root / full_path).resolve()
+            # Never serve anything outside dist/ (e.g. /../.env)
+            if target_file.is_file() and _dist_root in target_file.parents:
+                return FileResponse(target_file)
         index_file = dist_dir / "index.html"
         if index_file.is_file():
             return FileResponse(index_file)

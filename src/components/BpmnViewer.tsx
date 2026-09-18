@@ -10,8 +10,8 @@ import BpmnViewer from 'bpmn-js/dist/bpmn-navigated-viewer.production.min.js';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
 import { saveAs } from 'file-saver';
-import JSZip from 'jszip';
-import { BulkExportData } from '../types';
+import { BulkExportData, ProcessIR } from '../types';
+import { describeApiError } from '../lib/errors';
 import { Skeleton } from './ui/Skeleton';
 
 export interface BpmnViewerHandle {
@@ -31,7 +31,23 @@ export interface BpmnViewerProps {
   onSelectElement?: (id: string) => void;
   processName?: string;
   bulkExport?: BulkExportData;
+  /** The extracted process; the server re-serialises it per vendor profile for the bundle. */
+  processIr?: ProcessIR | null;
+  templateId?: string;
+  laneMap?: Record<string, string>;
   isLoading?: boolean;
+  /** Called with a short title/message when an export fails, so the app can show a toast. */
+  onExportError?: (title: string, message: string) => void;
+  onExportSuccess?: (message: string) => void;
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('Could not read PNG data'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 /**
@@ -110,12 +126,21 @@ export const BpmnViewerComponent = forwardRef<BpmnViewerHandle, BpmnViewerProps>
       onSelectElement,
       processName = 'process',
       bulkExport,
+      processIr,
+      templateId,
+      laneMap,
       isLoading,
+      onExportError,
+      onExportSuccess,
     },
     ref
   ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewerRef = useRef<any>(null);
+    const reportError = (title: string, err: unknown) => {
+      console.error(title, err);
+      onExportError?.(title, err instanceof Error ? err.message : String(err));
+    };
 
     // Imperative methods exposed to Toolbar and Floating Controls
     useImperativeHandle(ref, () => ({
@@ -153,7 +178,7 @@ export const BpmnViewerComponent = forwardRef<BpmnViewerHandle, BpmnViewerProps>
           const safeName = processName.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
           saveAs(blob, `${safeName}.svg`);
         } catch (err) {
-          console.error('Failed to export SVG:', err);
+          reportError('SVG export failed', err);
         }
       },
       exportPng: async () => {
@@ -164,58 +189,51 @@ export const BpmnViewerComponent = forwardRef<BpmnViewerHandle, BpmnViewerProps>
           const safeName = processName.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
           saveAs(pngBlob, `${safeName}.png`);
         } catch (err) {
-          console.error('Failed to export PNG:', err);
+          reportError('PNG export failed', err);
         }
       },
       exportZip: async () => {
         if (!viewerRef.current || !xml) return;
+        if (!processIr) {
+          onExportError?.('Bundle export unavailable', 'No extracted process is loaded for this diagram.');
+          return;
+        }
         try {
-          const safeName = processName.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-          const zip = new JSZip();
-
+          const safeName = processName.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase() || 'process';
           const { svg } = await viewerRef.current.saveSVG();
-          zip.file(`${safeName}.svg`, svg);
 
+          let pngBase64: string | undefined;
           try {
-            const pngBlob = await svgToPngBlob(svg, 2.5);
-            zip.file(`${safeName}.png`, pngBlob);
+            pngBase64 = await blobToBase64(await svgToPngBlob(svg, 2.5));
           } catch (err) {
-            console.warn('PNG rasterization inside ZIP failed:', err);
+            console.warn('PNG rasterisation skipped:', err);
           }
 
-          const profileXmlMap: Record<string, string> =
-            bulkExport?.bpmn_by_profile && Object.keys(bulkExport.bpmn_by_profile).length > 0
-              ? bulkExport.bpmn_by_profile
-              : {
-                  generic: xml,
-                  camunda: xml,
-                  signavio: xml,
-                  celonis: xml,
-                  aris: xml,
-                };
-
-          for (const [prof, profXml] of Object.entries(profileXmlMap)) {
-            zip.file(`${safeName}_${prof}.bpmn`, profXml);
-          }
-
-          const manifest = {
-            processName: processName,
-            exportedAt: new Date().toISOString(),
-            profiles: Object.keys(profileXmlMap),
-            formats: ['.bpmn', '.svg', '.png'],
-            generator: 'Process2BPMN Pipeline 2.0',
-          };
-          zip.file('manifest.json', JSON.stringify(manifest, null, 2));
-
-          const zipBlob = await zip.generateAsync({
-            type: 'blob',
-            compression: 'DEFLATE',
-            compressionOptions: { level: 6 },
+          // The server re-serialises the process once per vendor profile and validates each
+          // file against the BPMN 2.0 XSD, so every .bpmn in the bundle is distinct and importable.
+          const res = await fetch('/api/export/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              process_name: processName,
+              ir: processIr,
+              template_id: templateId || undefined,
+              lane_map: laneMap && Object.keys(laneMap).length > 0 ? laneMap : undefined,
+              svg,
+              png_base64: pngBase64,
+              profiles: bulkExport?.supported_profiles,
+            }),
           });
-
-          saveAs(zipBlob, `${safeName}_all_formats.zip`);
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            const ui = describeApiError(res.status, body);
+            onExportError?.(ui.title, ui.message);
+            return;
+          }
+          saveAs(await res.blob(), `${safeName}_all_formats.zip`);
+          onExportSuccess?.('Bundle downloaded: one validated .bpmn per vendor profile, plus SVG and PNG.');
         } catch (err) {
-          console.error('Failed to generate bulk export bundle:', err);
+          reportError('Bundle export failed', err);
         }
       },
     }));

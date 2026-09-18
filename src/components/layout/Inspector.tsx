@@ -60,13 +60,11 @@ export const Inspector: React.FC<InspectorProps> = ({
 
   if (!isOpen) return null;
 
+  const autoRepairs = validationIssues.filter((i) => i.severity === 'INFO');
+  const findings = validationIssues.filter((i) => i.severity !== 'INFO');
+  const openQuestions = processIr?.openQuestions || [];
   const totalIssuesCount =
-    validationIssues.length +
-    rowErrors.length +
-    (lintResult?.warnings?.length || 0) +
-    (processIr?.open_questions?.length || 0);
-    (lintResult?.warnings?.length || 0) +
-    (processIr?.open_questions?.length || 0);
+    findings.length + rowErrors.length + (lintResult?.warnings?.length || 0) + openQuestions.length;
 
   // Find lane name for selected element
   const getElementLane = (elem?: FlowNode) => {
@@ -269,6 +267,7 @@ export const Inspector: React.FC<InspectorProps> = ({
               </p>
               <p className="text-[13px] text-[var(--text-secondary-color)] mt-1">
                 Process graph is fully connected and valid BPMN 2.0.
+                {autoRepairs.length > 0 && ` ${autoRepairs.length} automatic repair(s) were applied.`}
               </p>
             </div>
           ) : (
@@ -323,12 +322,12 @@ export const Inspector: React.FC<InspectorProps> = ({
               )}
 
               {/* Validation & Lint Findings */}
-              {validationIssues.length > 0 && (
+              {findings.length > 0 && (
                 <div className="space-y-2">
                   <span className="text-[12px] font-semibold text-[var(--text-secondary-color)] uppercase tracking-wider">
-                    Graph Validation ({validationIssues.length})
+                    Graph Validation ({findings.length})
                   </span>
-                  {validationIssues.map((issue, idx) => (
+                  {findings.map((issue, idx) => (
                     <div
                       key={idx}
                       className="p-3 bg-[var(--surface-subtle)] rounded-[8px] space-y-1.5"
@@ -394,26 +393,45 @@ export const Inspector: React.FC<InspectorProps> = ({
               )}
 
               {/* Open Ambiguity Questions */}
-              {processIr?.open_questions && processIr.open_questions.length > 0 && (
+              {openQuestions.length > 0 && (
                 <div className="space-y-2">
                   <span className="text-[12px] font-semibold text-[var(--text-secondary-color)] uppercase tracking-wider">
-                    Open Questions ({processIr.open_questions.length})
+                    Open Questions ({openQuestions.length})
                   </span>
-                  {processIr.open_questions.map((q, idx) => (
+                  {openQuestions.map((q, idx) => (
                     <div
                       key={idx}
                       className="p-3 bg-[var(--surface-subtle)] rounded-[8px] space-y-1"
                     >
                       <div className="flex items-center gap-1.5 text-[var(--accent)]">
                         <HelpCircle className="w-3.5 h-3.5" />
-                        <span className="text-[12px] font-medium">Question for Process Owner</span>
+                        <span className="text-[12px] font-medium">{q.topic || 'Question for Process Owner'}</span>
                       </div>
                       <p className="text-[13px] text-[var(--text)] leading-snug">
-                        {q}
+                        {q.question}
                       </p>
+                      {q.suggestedAssumption && (
+                        <p className="text-[12px] text-[var(--text-secondary-color)] leading-snug">
+                          Assumed for now: {q.suggestedAssumption}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
+              )}
+
+              {/* Auto-repairs (informational) */}
+              {autoRepairs.length > 0 && (
+                <details className="space-y-2">
+                  <summary className="text-[12px] font-semibold text-[var(--text-secondary-color)] uppercase tracking-wider cursor-pointer">
+                    Auto-repairs applied ({autoRepairs.length})
+                  </summary>
+                  {autoRepairs.map((issue, idx) => (
+                    <div key={idx} className="p-3 bg-[var(--surface-subtle)] rounded-[8px] mt-2">
+                      <p className="text-[13px] text-[var(--text)] leading-snug">{issue.message}</p>
+                    </div>
+                  ))}
+                </details>
               )}
             </div>
           )}

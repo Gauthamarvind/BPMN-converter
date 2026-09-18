@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Dict, List, Tuple, Set, Optional, Any
 from dataclasses import dataclass, field
 from backend.ir.models import ProcessIR, FlowNode, SequenceFlow, Pool, Lane
+from backend.pipeline.graph_utils import compute_layered_ranks, order_within_ranks
 
 
 @dataclass
@@ -99,6 +100,8 @@ class SugiyamaLayoutEngine:
         self.x_gap = x_gap
         self.y_gap = y_gap
         self.template_spec = template_spec
+        self.back_edges: Set[Tuple[str, str]] = set()
+        self.rank_positions: Dict[str, int] = {}
         if template_spec and hasattr(template_spec, "layout_metrics"):
             m = template_spec.layout_metrics
             self.lane_min_height = getattr(m, "default_lane_height", lane_min_height)
@@ -142,6 +145,15 @@ class SugiyamaLayoutEngine:
                 max_in_one_col = max(rank_counts.values()) if rank_counts else 1
                 
                 lane_h = max(self.lane_min_height, max_in_one_col * (80.0 + self.y_gap) + 60.0)
+
+                # Loop-back edges are routed underneath their nodes (see _route_edges);
+                # reserve vertical room so staggered loops stay inside this lane.
+                lane_node_ids = {n.id for n in lane_nodes}
+                loops_in_lane = sum(
+                    1 for src, tgt in self.back_edges if src in lane_node_ids or tgt in lane_node_ids
+                )
+                if loops_in_lane:
+                    lane_h = max(lane_h, 180.0 + 28.0 * min(loops_in_lane - 1, 3))
 
                 lane_layout = LaneLayout(
                     lane_id=lane.id,
@@ -198,46 +210,29 @@ class SugiyamaLayoutEngine:
         return layout
 
     def _compute_ranks(self) -> Dict[str, int]:
-        """Assigns horizontal rank (0..N) using DAG topological ordering."""
-        elements_map = {e.id: e for e in self.ir.elements}
-        ranks: Dict[str, int] = {}
+        """
+        Assigns a horizontal rank (0..N) to every flow node.
 
-        # Build adjacency
-        out_edges: Dict[str, List[str]] = {e.id: [] for e in self.ir.elements}
-        in_degree: Dict[str, int] = {e.id: 0 for e in self.ir.elements}
+        1. Cycle breaking: a DFS from the start events marks the loop-back edges
+           (e.g. "Rejected -> back to Draft"). Those are stored in ``self.back_edges`` and
+           routed underneath the diagram by ``_route_edges``.
+        2. Layering: longest-path ranks over the remaining DAG, so every forward edge goes
+           strictly left-to-right and a loop target keeps its natural position.
+        3. Ordering: a barycenter pass reduces edge crossings inside each rank; the
+           resulting positions are stored in ``self.rank_positions``.
+        """
+        node_ids = [e.id for e in self.ir.elements]
+        edges = [(f.sourceId, f.targetId) for f in self.ir.flows]
+        roots = [e.id for e in self.ir.elements if e.type == "startEvent"]
+        if not roots and node_ids:
+            id_set = set(node_ids)
+            targets = {t for s, t in edges if s in id_set and t in id_set}
+            roots = [n for n in node_ids if n not in targets] or [node_ids[0]]
 
-        for f in self.ir.flows:
-            if f.sourceId in out_edges and f.targetId in out_edges:
-                out_edges[f.sourceId].append(f.targetId)
-                in_degree[f.targetId] += 1
-
-        # Sources (start events or in_degree == 0)
-        queue: List[str] = [eid for eid, deg in in_degree.items() if deg == 0]
-        if not queue:
-            # Cycle fallback
-            starts = [e.id for e in self.ir.elements if e.type == "startEvent"]
-            queue = starts if starts else ([self.ir.elements[0].id] if self.ir.elements else [])
-
-        for q in queue:
-            ranks[q] = 0
-
-        visited: Set[str] = set()
-        while queue:
-            curr = queue.pop(0)
-            visited.add(curr)
-            curr_rank = ranks.get(curr, 0)
-
-            for nxt in out_edges.get(curr, []):
-                # Only increment rank if moving forward
-                ranks[nxt] = max(ranks.get(nxt, 0), curr_rank + 1)
-                if nxt not in visited and nxt not in queue:
-                    queue.append(nxt)
-
-        # Fallback for any unvisited nodes
-        for e in self.ir.elements:
-            if e.id not in ranks:
-                ranks[e.id] = max(ranks.values()) + 1 if ranks else 0
-
+        ranks, back = compute_layered_ranks(node_ids, edges, roots)
+        self.back_edges = back
+        forward = [e for e in edges if e not in back]
+        self.rank_positions = order_within_ranks(ranks, node_ids, forward)
         return ranks
 
     def _layout_lane_nodes(
@@ -257,6 +252,7 @@ class SugiyamaLayoutEngine:
         lane_center_y = lane_bounds.y + (lane_bounds.height / 2.0)
 
         for r, rank_nodes in by_rank.items():
+            rank_nodes = sorted(rank_nodes, key=lambda n: self.rank_positions.get(n.id, 0))
             # X coordinate proportional to rank
             base_x = self.start_x + 40.0 + (r * (100.0 + self.x_gap))
             
@@ -298,7 +294,13 @@ class SugiyamaLayoutEngine:
                 )
 
     def _route_edges(self, layout: DiagramLayout) -> None:
-        """Generates clean orthogonal Manhattan waypoints for every sequence flow."""
+        """
+        Generates orthogonal Manhattan waypoints for every sequence flow.
+        Forward edges (left-to-right in the layered DAG) get a straight or Z-shaped route;
+        loop-back edges found by ``_compute_ranks`` are routed underneath the nodes they
+        span, staggered so several loops do not overlap.
+        """
+        loop_index = 0
         for flow in self.ir.flows:
             source_layout = layout.nodes.get(flow.sourceId)
             target_layout = layout.nodes.get(flow.targetId)
@@ -317,8 +319,10 @@ class SugiyamaLayoutEngine:
             waypoints: List[Waypoint] = []
             label_bounds: Optional[Bounds] = None
 
+            is_back_edge = (flow.sourceId, flow.targetId) in self.back_edges
+
             # Case 1: Normal Forward Flow (source is to the left of target)
-            if sb.x + sb.width < tb.x:
+            if not is_back_edge and sb.x + sb.width < tb.x:
                 start_pt = Waypoint(x=sb.x + sb.width, y=s_center_y)
                 end_pt = Waypoint(x=tb.x, y=t_center_y)
 
@@ -349,10 +353,11 @@ class SugiyamaLayoutEngine:
 
             # Case 2: Backward Loop / Return Flow (source is ahead or equal to target)
             else:
-                # Route bottom around nodes
+                # Route underneath the nodes the loop spans; stagger successive loops
                 start_pt = Waypoint(x=s_center_x, y=sb.y + sb.height)
                 end_pt = Waypoint(x=t_center_x, y=tb.y + tb.height)
-                bottom_y = max(sb.y + sb.height, tb.y + tb.height) + 35.0
+                bottom_y = max(sb.y + sb.height, tb.y + tb.height) + 35.0 + (loop_index % 4) * 14.0
+                loop_index += 1
 
                 waypoints = [
                     start_pt,

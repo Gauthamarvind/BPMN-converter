@@ -11,10 +11,12 @@ Whether you have Standard Operating Procedures (SOPs), meeting notes, interview 
 - **Multi-Format Ingestion**: Supports `.docx`, `.xlsx`, `.pdf`, `.csv`, `.md`, `.txt`, and `.vtt`/`.srt` transcripts.
 - **Enterprise BPMN 2.0 Compatibility**: Generates valid BPMN 2.0 XML validated against official OMG BPMN 2.0 XSD schemas.
 - **Vendor Export Profiles**: Tailors XML namespaces and Diagram Interchange (DI) attributes for **Generic BPMN 2.0**, **SAP Signavio**, **Camunda 7 & 8**, **Celonis**, and **Software AG ARIS**.
-- **Deterministic Layout Engine**: Multi-lane Sugiyama layered layout algorithm with cycle breaking, crossing minimization, and coordinate assignment.
+- **Deterministic Layout Engine**: Multi-lane Sugiyama layered layout — DFS cycle breaking (loop-backs are routed underneath, never re-ordered), longest-path layering, barycenter crossing reduction, and coordinate assignment.
 - **Vendor-Agnostic LLM Architecture**: Works with local models (Ollama, vLLM, LM Studio) or hosted cloud APIs (OpenAI, Azure OpenAI, Anthropic Claude, Google Gemini, Groq, OpenRouter), plus a zero-network deterministic Mock provider.
 - **Interactive No-Code Step Builder**: Capture, edit, reorder, and convert structured process steps directly in the browser.
 - **Pre-Formatted Process Capture Templates**: Downloadable Excel (`.xlsx`) and Word (`.docx`) interview templates with automatic column mapping.
+- **Export Gate**: a process with unreachable steps or unlabeled decision branches is shown for review but never exported — the UI disables Export, `/api/export/*` returns 422, `strict=true` makes `/api/convert*` refuse too, and the CLI exits with code 2 unless `--force`.
+- **Multi-User Ready**: reverse-proxy or token authentication, per-user reference templates, request throttling, and SSRF/XXE protection (see *Deploying for a team*).
 
 ---
 
@@ -75,6 +77,39 @@ docker compose up -d
 The container mounts `./data` into `/app/data` to persist custom uploaded BPMN reference templates across container restarts.
 
 ---
+
+
+## Deploying for a team
+
+Out of the box the server is a single-user tool (`APP_AUTH_MODE=none`). To run it for several
+people behind a shared URL:
+
+1. Put an SSO gateway in front of it (oauth2-proxy, Cloudflare Access, Traefik ForwardAuth,
+   Nginx `auth_request`) and set `APP_AUTH_MODE=proxy` — the gateway's identity header
+   (`APP_AUTH_HEADER`, default `X-Forwarded-User`) becomes the user. Every `/api/*` call without
+   it is rejected with 401 (`/api/health` stays public for load balancers).
+   For CI or scripts use `APP_AUTH_MODE=token` with `Authorization: Bearer <APP_API_TOKEN>`.
+2. Decide who pays for the model. `ALLOW_CLIENT_LLM_OVERRIDES=false` makes everyone use the
+   server's `.env` key; leave it `true` to let people bring their own key from the Settings sheet.
+   Client-supplied endpoints are always checked against the SSRF rules
+   (`LLM_ALLOW_PRIVATE_BASE_URLS`, `LLM_BASE_URL_ALLOWLIST`).
+3. Uploaded reference templates belong to the user who uploaded them; built-in vendor templates
+   are shared and cannot be deleted. "Default template" is stored per user.
+4. Throttling: `RATE_LIMIT_PER_MINUTE` (30/min per user when auth is on) and
+   `MAX_CONCURRENT_EXTRACTIONS` (model calls in flight; extra requests wait up to
+   `EXTRACTION_QUEUE_TIMEOUT_SECONDS`, then get 503).
+5. Serve the UI and API from the same origin; set `CORS_ALLOW_ORIGINS` only if you don't.
+
+### Export gate
+
+Conversion always returns the diagram so you can see what is wrong, with `export_blocked: true`
+when the process has ERROR-level issues (unreachable steps, unlabeled decision branches). The
+files people actually download go through `POST /api/export/bpmn` and `POST /api/export/bulk`,
+which refuse blocked processes (422) and validate every file against the OMG BPMN 2.0 XSD. The
+bulk bundle contains one *distinct* `.bpmn` per vendor profile plus SVG/PNG.
+API clients that must never receive an unreviewed diagram pass `strict=true` to
+`/api/convert`, `/api/convert-json` or `/api/render`. The CLI refuses to write a blocked
+diagram and exits with code 2; add `--force` to write it for inspection.
 
 ## Choosing a model (read this first)
 
