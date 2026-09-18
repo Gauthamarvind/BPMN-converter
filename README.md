@@ -76,6 +76,25 @@ The container mounts `./data` into `/app/data` to persist custom uploaded BPMN r
 
 ---
 
+## Choosing a model (read this first)
+
+The server reads its model settings from `.env` at startup — the template `.env.example` has one
+block per provider (Gemini, Ollama, OpenAI-compatible, Azure, Anthropic, mock). Restart after editing.
+
+Two things in the app make this painless:
+
+- The **model pill** in the toolbar shows what the next conversion will use (green dot = ready,
+  red = no API key, grey = rule engine). Click it to open Settings.
+- **Settings → Test connection** sends one tiny request to the model and shows either the latency
+  or the exact error (unreachable endpoint, rejected key, rate limit) without converting anything.
+
+Settings overrides live in the browser for that session; the API key is never persisted. Leave the
+provider on "Server default" to use `.env`.
+
+Structured inputs — the fill-in Excel/Word template, the Step Builder and legacy step lists — never
+call a model. Switching the target tool, reference template or lane mapping re-renders the diagram
+from the extracted process (`POST /api/render`) instead of calling the model again.
+
 ## Switching LLM Providers & Models
 
 Process2BPMN is fully vendor-agnostic and configured via environment variables. Configure your `.env` file (or copy from `.env.example`) to select your preferred provider:

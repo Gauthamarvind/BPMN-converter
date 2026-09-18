@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings as SettingsIcon, Layers, Download, Check, GitMerge, ChevronDown, Table, BookOpen, FileSpreadsheet } from 'lucide-react';
+import { Settings as SettingsIcon, Layers, Download, Check, GitMerge, ChevronDown, Table, BookOpen, Cpu } from 'lucide-react';
 import { ProfileMetadata, TemplateRecord } from '../../types';
 import { Button } from '../ui/Button';
 import { SegmentedControl, SegmentedOption } from '../ui/SegmentedControl';
@@ -25,6 +25,9 @@ export interface ToolbarProps {
   isExportingZip?: boolean;
   hasDiagram?: boolean;
   exportBlocked?: boolean;
+  /** e.g. "gemini · gemini-2.5-flash" — what the next conversion will use. */
+  activeModelLabel?: string;
+  activeModelState?: 'ready' | 'missing-key' | 'mock' | 'unknown';
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -47,15 +50,31 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isExportingZip,
   hasDiagram,
   exportBlocked,
+  activeModelLabel,
+  activeModelState = 'unknown',
 }) => {
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   // Profile options for SegmentedControl
+  // Short labels keep the control readable; the full vendor name is in the tooltip.
   const profileOptions: SegmentedOption[] = profiles.map((p) => ({
     id: p.id,
-    label: p.displayName || p.name,
+    label: p.shortName || p.displayName || p.name,
   }));
+
+  const modelDot = {
+    ready: 'bg-[var(--success)]',
+    'missing-key': 'bg-[var(--danger)]',
+    mock: 'bg-[var(--text-tertiary)]',
+    unknown: 'bg-[var(--text-tertiary)]',
+  }[activeModelState];
+  const modelTitle = {
+    ready: 'Model configured — click to change',
+    'missing-key': 'No API key configured — click to set one',
+    mock: 'Rule engine only — no model will be called',
+    unknown: 'Checking model configuration…',
+  }[activeModelState];
 
   const activeTemplate = templates.find((t) => t.id === selectedTemplateId);
 
@@ -70,7 +89,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Center: Target Tool Segmented Control */}
       {profileOptions.length > 0 && (
-        <div className="hidden md:flex items-center">
+        <div
+          className="hidden md:flex items-center"
+          title={profiles.find((p) => p.id === selectedProfileId)?.displayName || 'Target tool'}
+        >
           <SegmentedControl
             id="toolbar-profile-selector"
             options={profileOptions}
@@ -80,8 +102,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </div>
       )}
 
-      {/* Right: Template picker, Primary Export, Settings */}
-      <div className="flex items-center gap-2">
+      {/* Right: model status, template picker, tools, Export, Settings */}
+      <div className="flex items-center gap-1.5 whitespace-nowrap">
+        {/* Model status pill */}
+        {activeModelLabel && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            title={modelTitle}
+            className="hidden lg:inline-flex items-center gap-2 h-8 px-3 rounded-[8px] text-[13px] text-[var(--text-secondary-color)] hover:text-[var(--text)] hover:bg-[var(--surface-subtle)] transition-colors cursor-pointer max-w-[260px]"
+          >
+            <span className={`w-2 h-2 rounded-full shrink-0 ${modelDot}`} />
+            <Cpu className="w-3.5 h-3.5 shrink-0 opacity-70" />
+            <span className="truncate">{activeModelLabel}</span>
+          </button>
+        )}
+
         {/* Template Picker Popover */}
         <Popover
           id="template-picker-popover"
@@ -93,10 +129,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               size="md"
               icon={<Layers className="w-4 h-4 text-[var(--text-secondary-color)]" />}
               onClick={() => setIsTemplateMenuOpen(!isTemplateMenuOpen)}
-              className="max-w-[180px]"
+              className="max-w-[200px]"
+              title={activeTemplate ? `Reference template: ${activeTemplate.name}` : 'Reference template (none)'}
             >
               <span className="truncate">
-                {activeTemplate ? activeTemplate.name : 'Templates'}
+                {activeTemplate ? activeTemplate.name : 'Reference'}
               </span>
               <ChevronDown className="w-3.5 h-3.5 opacity-60 shrink-0 ml-0.5" />
             </Button>
@@ -145,30 +182,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
             <div className="h-px bg-[var(--separator)] my-1" />
 
-            <div className="px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary-color)]">
-              Process Capture Workbooks
-            </div>
-            <a
-              href="/api/templates/download-blank?type=xlsx&sample=true"
-              download="Process_Capture_Template.xlsx"
-              onClick={() => setIsTemplateMenuOpen(false)}
-              className="w-full px-2.5 py-1.5 rounded-[8px] text-[13px] text-[var(--text)] hover:bg-[var(--surface-subtle)] flex items-center gap-2 cursor-pointer no-underline"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[var(--success)]" />
-              <span>Download Excel Template</span>
-            </a>
-            <a
-              href="/api/templates/download-blank?type=docx&sample=true"
-              download="Process_Capture_Template.docx"
-              onClick={() => setIsTemplateMenuOpen(false)}
-              className="w-full px-2.5 py-1.5 rounded-[8px] text-[13px] text-[var(--text)] hover:bg-[var(--surface-subtle)] flex items-center gap-2 cursor-pointer no-underline"
-            >
-              <Table className="w-3.5 h-3.5 text-[var(--accent)]" />
-              <span>Download Word Template</span>
-            </a>
-
-            <div className="h-px bg-[var(--separator)] my-1" />
-
             {activeTemplate && (
               <button
                 onClick={() => {
@@ -203,9 +216,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             size="md"
             icon={<BookOpen className="w-4 h-4 text-[var(--text-secondary-color)]" />}
             onClick={onOpenTemplatesAndSamples}
-            title="Templates & Sample Workflows"
+            title="Templates & sample workflows"
           >
-            <span>Templates & samples</span>
+            <span className="hidden xl:inline">Templates &amp; samples</span>
+            <span className="xl:hidden">Samples</span>
           </Button>
         )}
 
@@ -217,8 +231,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             size="md"
             icon={<Table className="w-4 h-4 text-[var(--text-secondary-color)]" />}
             onClick={onOpenStepBuilder}
+            title="Step Builder — capture a process as a simple step list"
           >
-            Step Builder
+            <span className="hidden xl:inline">Step Builder</span>
+            <span className="xl:hidden">Steps</span>
           </Button>
         )}
 

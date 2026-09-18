@@ -7,6 +7,7 @@
 # - Disallows nested subProcess recursion without explicit expansion bounds.
 
 name: "signavio"
+shortName: "Signavio"
 displayName: "SAP Signavio Process Manager"
 description: "Optimized for SAP Signavio import, collaboration wrappers, and flow labeling."
 

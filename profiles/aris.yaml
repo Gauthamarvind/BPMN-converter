@@ -7,6 +7,7 @@
 # - Max label length of 100 characters recommended for ARIS symbol sizing.
 
 name: "aris"
+shortName: "ARIS"
 displayName: "Software AG ARIS"
 description: "Optimized for Software AG ARIS EPC/BPMN 2.0 importer with organizational lane mappings."
 

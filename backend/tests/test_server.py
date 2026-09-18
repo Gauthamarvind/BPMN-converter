@@ -175,8 +175,10 @@ class TestServerEndpoints(unittest.TestCase):
             srv.MAX_UPLOAD_SIZE_BYTES = original_limit
 
     def test_spa_fallback(self):
+        dist_index = Path(__file__).resolve().parents[2] / "dist" / "index.html"
+        if not dist_index.is_file():
+            self.skipTest("frontend not built (run `npm run build` first); SPA fallback needs dist/index.html")
         res = self.client.get("/")
-        # dist/ was compiled, so index.html is served
         self.assertEqual(res.status_code, 200)
         self.assertIn("<!doctype html>", res.text.lower())
 

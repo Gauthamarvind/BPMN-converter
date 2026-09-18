@@ -7,6 +7,7 @@
 # - Conditions are ideally displayed on the flow name for quick visual validation.
 
 name: "celonis"
+shortName: "Celonis"
 displayName: "Celonis Process Designer"
 description: "Tailored for Celonis process modeling, transition tracking, and conformance checking."
 

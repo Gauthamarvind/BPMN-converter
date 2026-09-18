@@ -12,7 +12,7 @@ import {
   AlertCircle,
   FileSpreadsheet,
 } from 'lucide-react';
-import { SampleFile } from '../../types';
+import { SampleFile, UiError } from '../../types';
 import { Button } from '../ui/Button';
 import { Textarea } from '../ui/Field';
 import { Popover } from '../ui/Popover';
@@ -29,7 +29,8 @@ export interface SidebarProps {
   onSelectSample: (sample: SampleFile) => void;
   onConvert: () => void;
   isLoading: boolean;
-  error?: string | null;
+  error?: UiError | null;
+  onOpenSettings?: () => void;
   isSheet?: boolean;
 }
 
@@ -46,10 +47,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onConvert,
   isLoading,
   error,
+  onOpenSettings,
   isSheet = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
+
+  useEffect(() => {
+    setShowErrorDetails(false);
+  }, [error]);
+
+  const errorCard = error ? (
+    <div
+      role="alert"
+      className="p-3 rounded-[12px] bg-[var(--danger-subtle)] text-[13px] leading-snug space-y-1.5"
+    >
+      <div className="flex items-start gap-2 text-[var(--danger)]">
+        <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
+        <span className="font-semibold">{error.title}</span>
+      </div>
+      <p className="text-[var(--text)] pl-6">{error.message}</p>
+      <div className="flex items-center gap-3 pl-6 text-[12px]">
+        {error.canOpenSettings && onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="font-medium text-[var(--accent)] hover:underline cursor-pointer"
+          >
+            Open Settings
+          </button>
+        )}
+        {error.details && error.details !== error.message && (
+          <button
+            type="button"
+            onClick={() => setShowErrorDetails((v) => !v)}
+            className="text-[var(--text-secondary-color)] hover:text-[var(--text)] cursor-pointer"
+          >
+            {showErrorDetails ? 'Hide details' : 'Show details'}
+          </button>
+        )}
+      </div>
+      {showErrorDetails && error.details && (
+        <pre className="pl-6 text-[12px] text-[var(--text-secondary-color)] whitespace-pre-wrap break-words font-mono select-text">
+          {error.details}
+        </pre>
+      )}
+    </div>
+  ) : null;
   const [isSamplesOpen, setIsSamplesOpen] = useState(false);
 
   // Keyboard shortcut ⌘\ or Ctrl+\ to toggle sidebar
@@ -189,12 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
 
                 {/* Inline Error */}
-                {error && (
-                  <div className="p-2.5 rounded-[8px] bg-[var(--danger-subtle)] text-[var(--danger)] text-[13px] flex items-start gap-1.5 leading-snug">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
+                {errorCard}
 
                 {/* Raw Text Input Area */}
                 <div>
@@ -381,12 +421,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
 
             {/* Inline Error under Dropzone if any */}
-            {error && (
-              <div className="p-2.5 rounded-[8px] bg-[var(--danger-subtle)] text-[var(--danger)] text-[13px] flex items-start gap-1.5 leading-snug">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
+            {errorCard}
 
             {/* Raw Text Input Area */}
             <div>

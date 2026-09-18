@@ -29,6 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.config import config
+from backend.version import VERSION
 from backend.ir.models import ProcessIR, TemplateBindings
 from backend.ingestion.parser import ingest_file, IngestionError
 from backend.llm.errors import (
@@ -47,7 +48,7 @@ from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import BpmnSchemaError, BpmnSchemaConfigurationError
 from backend.pipeline.linter import ProfileLinter
-from backend.pipeline.process_pipeline import process_pipeline
+from backend.pipeline.process_pipeline import process_pipeline, render_ir
 from backend.pipeline.mock_extractor import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
 from backend.templates.doc_parser import DocTemplateParser
@@ -229,16 +230,112 @@ class LintRequest(BaseModel):
     profile: str = "generic"
 
 
+class RenderRequest(BaseModel):
+    ir: Dict[str, Any]
+    profile: str = "generic"
+    template_id: Optional[str] = None
+    lane_map: Optional[Dict[str, str]] = None
+    filename: str = "process.bpmn"
+
+
+class LLMPingRequest(BaseModel):
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+
+
+def _mask(value: str) -> str:
+    if not value:
+        return ""
+    return value[:4] + "…" + value[-2:] if len(value) > 8 else "•••"
+
+
 @app.get("/api/health")
 def health_check():
+    """Reports the LLM configuration the server loaded from .env (the key itself is never returned)."""
+    key = config.llm.api_key or ""
+    placeholder_keys = ("", "ollama", "dummy", "your-api-key", "changeme")
     return {
         "status": "healthy",
         "service": "Process2BPMN",
-        "version": "1.0.0",
+        "version": VERSION,
         "active_provider": config.llm.provider,
         "active_model": config.llm.model,
-        "base_url": config.llm.base_url
+        "base_url": config.llm.base_url,
+        "api_key_set": key.strip().lower() not in placeholder_keys,
+        "api_key_hint": _mask(key) if key.strip().lower() not in placeholder_keys else "",
+        "context_tokens": config.llm.context_tokens,
+        "single_pool": config.single_pool,
     }
+
+
+@app.post("/api/llm/ping")
+def llm_ping(req: LLMPingRequest):
+    """
+    Cheap connectivity test for the active (or overridden) model: one tiny completion.
+    Never raises for LLM problems; returns ok=false with the typed error so the UI can show it.
+    """
+    provider_name = (req.provider or config.llm.provider or "").lower()
+    if provider_name == "mock":
+        return {"ok": True, "provider": "mock", "model": "rule-engine", "latency_ms": 0,
+                "note": "Mock mode never calls a model; text inputs use the rule engine."}
+    started = time.time()
+    try:
+        prov = get_llm_provider(
+            provider_name=req.provider or None,
+            base_url=req.base_url or None,
+            api_key=req.api_key or None,
+            model=req.model or None,
+        )
+        _, raw_text, usage = prov.complete(
+            [{"role": "user", "content": "Reply with the single word OK."}],
+            temperature=0.0,
+            max_tokens=8,
+        )
+        return {
+            "ok": True,
+            "provider": getattr(prov, "provider_name", provider_name),
+            "model": getattr(prov, "model", req.model or config.llm.model),
+            "latency_ms": int((time.time() - started) * 1000),
+            "reply": (raw_text or "")[:40],
+            "tokens": usage.get("total_tokens", 0) if isinstance(usage, dict) else 0,
+        }
+    except LLMError as ex:
+        return {
+            "ok": False,
+            "provider": getattr(ex, "provider", None) or provider_name,
+            "model": getattr(ex, "model", None) or req.model or config.llm.model,
+            "latency_ms": int((time.time() - started) * 1000),
+            "kind": ex.__class__.__name__,
+            "error": str(ex),
+        }
+    except Exception as ex:  # configuration problems, unexpected adapter failures
+        return {
+            "ok": False,
+            "provider": provider_name,
+            "model": req.model or config.llm.model,
+            "latency_ms": int((time.time() - started) * 1000),
+            "kind": ex.__class__.__name__,
+            "error": str(ex),
+        }
+
+
+@app.post("/api/render")
+def render_from_ir(req: RenderRequest):
+    """
+    Re-runs validation, template binding, lint, layout and serialization on an existing IR.
+    Lets the UI switch target tool, template or lane mapping without calling the model again.
+    """
+    ir = ProcessIR.from_dict(req.ir)
+    return render_ir(
+        ir=ir,
+        filename=req.filename,
+        profile_name=req.profile,
+        mock=True,  # never call a model here; lane mapping falls back to name matching
+        template_id=req.template_id,
+        lane_map=req.lane_map,
+    )
 
 
 @app.get("/api/profiles")
@@ -250,6 +347,7 @@ def get_profiles():
             "id": p_id,
             "name": prof.get("name", p_id),
             "displayName": prof.get("displayName", p_id),
+            "shortName": prof.get("shortName", prof.get("displayName", p_id)),
             "description": prof.get("description", ""),
             "assumptions": prof.get("assumptions", []),
             "targetVendor": prof.get("targetVendor", "")

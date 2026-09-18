@@ -134,6 +134,34 @@ def process_pipeline(
     if ir is None:
         raise ValueError(f"Failed to extract Process IR from '{filename}'")
 
+    return render_ir(
+        ir=ir,
+        filename=filename,
+        profile_name=profile_name,
+        mock=mock,
+        template_id=template_id,
+        lane_map=lane_map,
+        extraction_meta=extraction_meta,
+        normalized_text=doc.normalized_text if doc else "",
+    )
+
+
+def render_ir(
+    ir: ProcessIR,
+    filename: str = "process.bpmn",
+    profile_name: str = "generic",
+    mock: bool = False,
+    template_id: Optional[str] = None,
+    lane_map: Optional[Dict[str, str]] = None,
+    extraction_meta: Optional[Dict[str, Any]] = None,
+    normalized_text: str = "",
+) -> Dict[str, Any]:
+    """
+    Stages 3-8 of the pipeline: validate/repair an existing Process IR, bind an optional
+    reference template, lint against the target profile, lay out, serialize, XSD-validate.
+    Used by process_pipeline() after extraction and by /api/render to switch target tools,
+    templates or lane mappings without calling the model again.
+    """
     # 3. Deterministic Validation & Repair
     logger.info(f"[ProcessPipeline] Validating and repairing process graph...")
     validator = ProcessValidator(ir)
@@ -251,7 +279,7 @@ def process_pipeline(
             "flow_count": len(repaired_ir.flows),
             "pool_count": len(repaired_ir.pools),
             "lane_count": sum(len(p.lanes) for p in repaired_ir.pools),
-            "extraction": extraction_meta
+            "extraction": extraction_meta or {"mode": "render", "tokens_used": 0}
         },
-        "normalized_text": doc.normalized_text if doc else ""
+        "normalized_text": normalized_text
     }

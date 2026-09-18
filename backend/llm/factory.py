@@ -11,6 +11,24 @@ from backend.llm.base import LLMProvider
 from backend.llm.errors import LLMConfigurationError
 
 
+OPENAI_STYLE_DEFAULT_URLS = (
+    "http://localhost:11434/v1",
+    "http://127.0.0.1:11434/v1",
+    "http://localhost:11434",
+)
+
+
+def _is_custom_base_url(url: Optional[str]) -> bool:
+    """
+    True when the caller deliberately set a base URL for a hosted provider.
+    Empty values and the Ollama/OpenAI-compatible default are not custom: they leak in
+    from the generic LLM_BASE_URL default or from a stale UI field and must not be applied
+    to Gemini or Anthropic, whose adapters have their own correct defaults.
+    """
+    cleaned = (url or "").strip().rstrip("/")
+    return bool(cleaned) and cleaned not in OPENAI_STYLE_DEFAULT_URLS
+
+
 def get_llm_provider(
     provider_name: Optional[str] = None,
     base_url: Optional[str] = None,
@@ -33,7 +51,10 @@ def get_llm_provider(
         return OpenAICompatibleAdapter(base_url=url, api_key=key, model=mdl, auth_header=header)
     elif prov in ("anthropic", "claude"):
         from backend.llm.adapters.anthropic import AnthropicAdapter
-        return AnthropicAdapter(base_url=url, api_key=key, model=mdl)
+        kwargs = {"api_key": key, "model": mdl}
+        if _is_custom_base_url(url):
+            kwargs["base_url"] = url
+        return AnthropicAdapter(**kwargs)
     elif prov in ("gemini", "google"):
         try:
             from backend.llm.adapters.gemini import GeminiAdapter
@@ -42,7 +63,10 @@ def get_llm_provider(
                 "LLM_PROVIDER=gemini but the optional adapter backend/llm/adapters/gemini.py is not "
                 "installed. Restore the file or choose another provider."
             ) from ex
-        return GeminiAdapter(base_url=url, api_key=key, model=mdl)
+        kwargs = {"api_key": key, "model": mdl}
+        if _is_custom_base_url(url):
+            kwargs["base_url"] = url
+        return GeminiAdapter(**kwargs)
     elif prov == "mock":
         from backend.llm.adapters.mock import MockAdapter
         return MockAdapter(base_url=url, api_key=key, model=mdl)

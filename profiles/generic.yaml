@@ -6,6 +6,7 @@
 # - NCName identifiers are strictly compliant.
 
 name: "generic"
+shortName: "Generic"
 displayName: "Generic BPMN 2.0 (Standard)"
 description: "Strict OMG BPMN 2.0 Analytic Subclass compliant export suitable for all standard modelers."
 

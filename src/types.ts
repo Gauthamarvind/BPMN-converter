@@ -73,6 +73,8 @@ export interface ProfileMetadata {
   id: string;
   name: string;
   displayName: string;
+  /** Short label for the toolbar (e.g. "Signavio"); falls back to displayName. */
+  shortName?: string;
   description: string;
   assumptions: string[];
   targetVendor: string;
@@ -191,9 +193,42 @@ export interface RowValidationErrorItem {
 }
 
 export interface LLMSettings {
-  provider: 'openai_compatible' | 'anthropic' | 'gemini' | 'mock';
+  /** Empty string = use the server's .env configuration. */
+  provider: '' | 'openai_compatible' | 'anthropic' | 'gemini' | 'mock';
   model: string;
   baseUrl: string;
   apiKey: string;
   temperature: number;
+}
+
+/** What the server loaded from .env (GET /api/health). The key itself is never sent. */
+export interface ServerConfig {
+  active_provider: string;
+  active_model: string;
+  base_url: string;
+  api_key_set: boolean;
+  api_key_hint?: string;
+  context_tokens?: number;
+  single_pool?: boolean;
+  version?: string;
+}
+
+/** Result of POST /api/llm/ping. */
+export interface LLMPingResult {
+  ok: boolean;
+  provider?: string;
+  model?: string;
+  latency_ms?: number;
+  kind?: string;
+  error?: string;
+  note?: string;
+}
+
+/** A user-facing error: a short title, one plain sentence, and the raw detail on demand. */
+export interface UiError {
+  title: string;
+  message: string;
+  details?: string;
+  kind?: string;
+  canOpenSettings?: boolean;
 }
