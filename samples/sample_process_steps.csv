@@ -1,0 +1,9 @@
+Step ID,Actor / Role,Activity Name,Next Step,Condition / Rule,System
+STEP_01,Customer,Submit Purchase Order,STEP_02,,E-Commerce Portal
+STEP_02,Sales Representative,Review PO Details,STEP_03,,CRM
+STEP_03,System,Check Inventory Availability,STEP_04 / STEP_05,,ERP
+STEP_04,Warehouse Operator,Pick and Pack Goods,STEP_06,Stock Available,WMS
+STEP_05,Procurement Officer,Issue Supplier Restock Order,STEP_04,Out of Stock,ERP
+STEP_06,Logistics Coordinator,Generate Shipping Label and Dispatch,STEP_07,,Logistics Hub
+STEP_07,Finance Specialist,Generate Invoice and Send to Customer,STEP_08,,Billing System
+STEP_08,Customer,Acknowledge Receipt and Remit Payment,END,,Banking Portal

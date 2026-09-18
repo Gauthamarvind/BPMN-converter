@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:aris="http://www.ids-scheer.com/aris"
+                  id="Definitions_ARIS_Template"
+                  targetNamespace="http://www.ids-scheer.com/aris"
+                  exporter="ARIS Architect"
+                  exporterVersion="10.0">
+  <bpmn:collaboration id="Collaboration_ARIS">
+    <bpmn:participant id="Participant_ARIS" name="ARIS Enterprise Framework" processRef="Process_ARIS"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_ARIS" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_ARIS">
+      <bpmn:lane id="Lane_Requestor" name="Requester"/>
+      <bpmn:lane id="Lane_Fulfillment" name="Fulfillment Team"/>
+      <bpmn:lane id="Lane_Auditing" name="Compliance and Audit"/>
+    </bpmn:laneSet>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_ARIS">
+    <bpmndi:BPMNPlane id="BPMNPlane_ARIS" bpmnElement="Collaboration_ARIS">
+      <bpmndi:BPMNShape id="Shape_Participant_ARIS" bpmnElement="Participant_ARIS" isHorizontal="true">
+        <dc:Bounds x="100" y="80" width="1300" height="540"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_ARIS_1" bpmnElement="Lane_Requestor" isHorizontal="true">
+        <dc:Bounds x="130" y="80" width="1270" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_ARIS_2" bpmnElement="Lane_Fulfillment" isHorizontal="true">
+        <dc:Bounds x="130" y="260" width="1270" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_ARIS_3" bpmnElement="Lane_Auditing" isHorizontal="true">
+        <dc:Bounds x="130" y="440" width="1270" height="180"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

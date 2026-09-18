@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Highlight styling for active selected node in bpmn-js */
+.highlight-node:not(.djs-connection) .djs-visual > :nth-child(1) {
+  fill: #eff6ff !important;
+  stroke: #2563eb !important;
+  stroke-width: 2.5px !important;
+}
+
+.highlight-node.djs-connection .djs-visual > :nth-child(1) {
+  stroke: #2563eb !important;
+  stroke-width: 2.5px !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

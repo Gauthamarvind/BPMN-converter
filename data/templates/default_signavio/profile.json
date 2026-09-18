@@ -1,0 +1,11 @@
+{
+  "profile_id": "profile_default_signavio",
+  "base_profile": "signavio",
+  "displayName": "Signavio Conformance (SAP Signavio Standard Template)",
+  "source_vendor": "signavio",
+  "targetVendor": "signavio",
+  "custom_namespaces": {},
+  "exporter": "Signavio Process Editor",
+  "exporterVersion": "14.3.0",
+  "description": "Auto-derived export profile from reference template 'SAP Signavio Standard Template'."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "default_camunda",
+  "name": "Camunda 8 Reference Template",
+  "type": "bpmn",
+  "source_vendor": "camunda",
+  "upload_date": "2026-09-18 09:01:36",
+  "filename": "default_camunda.bpmn",
+  "is_default": true,
+  "derived_profile": "profile_default_camunda",
+  "description": "Reference BPMN template conforming to Camunda",
+  "pools_count": 1,
+  "lanes_count": 3,
+  "skeleton_count": 1
+}

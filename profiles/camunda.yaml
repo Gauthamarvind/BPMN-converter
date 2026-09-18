@@ -1,0 +1,42 @@
+# Camunda Modeler Export Profile (Camunda 7 & 8)
+# Assumptions:
+# - Camunda Modeler and bpmn.io expect standard BPMN 2.0 XML with full BPMNDI.
+# - Explicit bpmn:conditionExpression with xsi:type="bpmn:tFormalExpression" is strictly parsed.
+# - Element IDs should be clean alphanumeric (e.g., Activity_1a2b3c, Gateway_4d5e6f).
+# - Supports all standard analytic elements including serviceTask, userTask, sendTask, receiveTask.
+# - Collaboration with pools/lanes is fully supported.
+
+name: "camunda"
+displayName: "Camunda Modeler / bpmn.io"
+description: "Optimized for Camunda Modeler 7/8 and bpmn.io standard compliance with executable semantics."
+
+forceCollaboration: true
+maxLabelLength: 120
+conditionLocation: "conditionExpression"
+idFormatPattern: "^(Activity_|Gateway_|Event_|Flow_|Participant_|Lane_)[a-zA-Z0-9_-]+$"
+
+allowedElementTypes:
+  - startEvent
+  - endEvent
+  - intermediateTimerEvent
+  - intermediateMessageEvent
+  - task
+  - userTask
+  - serviceTask
+  - manualTask
+  - sendTask
+  - receiveTask
+  - exclusiveGateway
+  - parallelGateway
+  - inclusiveGateway
+  - subProcess
+  - callActivity
+
+extensionNamespaces:
+  camunda: "http://camunda.org/schema/1.0/bpmn"
+
+assumptions:
+  - "Camunda modeler renders standard BPMNDI without requiring vendor-specific shape coordinates."
+  - "Requires xsi:type='bpmn:tFormalExpression' on bpmn:conditionExpression."
+  - "Default flows are declared via default attribute on the source gateway/activity."
+  - "Each lane lists contained flow nodes in flowNodeRef tags."

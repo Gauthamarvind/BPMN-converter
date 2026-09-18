@@ -1,0 +1,39 @@
+# Generic BPMN 2.0 Profile (Analytic Conformance Subclass)
+# Assumptions:
+# - Target tool adheres strictly to OMG BPMN 2.0 specification (Analytic Subclass).
+# - Supports collaboration wrapper with participants and swimlanes.
+# - Conditions are placed in conditionExpression formal expressions.
+# - NCName identifiers are strictly compliant.
+
+name: "generic"
+displayName: "Generic BPMN 2.0 (Standard)"
+description: "Strict OMG BPMN 2.0 Analytic Subclass compliant export suitable for all standard modelers."
+
+forceCollaboration: true
+maxLabelLength: 128
+conditionLocation: "conditionExpression"  # "conditionExpression" | "flowName" | "both"
+idFormatPattern: "^[a-zA-Z_][a-zA-Z0-9_.-]*$"
+
+allowedElementTypes:
+  - startEvent
+  - endEvent
+  - intermediateTimerEvent
+  - intermediateMessageEvent
+  - task
+  - userTask
+  - serviceTask
+  - manualTask
+  - sendTask
+  - receiveTask
+  - exclusiveGateway
+  - parallelGateway
+  - inclusiveGateway
+  - subProcess
+  - callActivity
+
+extensionNamespaces: {}
+
+assumptions:
+  - "Standard OMG BPMN 2.0 Analytic conformance."
+  - "Supports swimlanes via bpmn:collaboration and bpmn:laneSet."
+  - "BPMNDI shapes and edges fully respected."

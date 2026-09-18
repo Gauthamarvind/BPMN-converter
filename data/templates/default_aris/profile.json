@@ -1,0 +1,11 @@
+{
+  "profile_id": "profile_default_aris",
+  "base_profile": "aris",
+  "displayName": "ARIS Conformance (ARIS Process Governance Template)",
+  "source_vendor": "aris",
+  "targetVendor": "aris",
+  "custom_namespaces": {},
+  "exporter": "ARIS Architect",
+  "exporterVersion": "10.0",
+  "description": "Auto-derived export profile from reference template 'ARIS Process Governance Template'."
+}

@@ -1,0 +1,19 @@
+Interviewer: Can you walk me through what happens when an employee submits a new business travel expense report?
+
+Finance Lead (Sarah): Sure. The employee logs into the expense portal and uploads all itemized receipts along with the business purpose. Once submitted, the portal automatically verifies if the total is under $500.
+
+Interviewer: What if it's under $500?
+
+Sarah: If the expense is less than or equal to $500, it skips managerial approval and goes directly to the Automated Accounting Bot, which runs a policy compliance check. If the policy check passes, the accounting system schedules an automated bank transfer and emails the payment confirmation to the employee. If the policy check flags any issues, it gets routed to a Senior Financial Auditor for manual audit.
+
+Interviewer: And what if the amount exceeds $500?
+
+Sarah: If the amount is greater than $500, the system routes the expense report to the Employee's Direct Department Manager. The manager has 3 business days to review the receipts and justify the business need.
+
+Interviewer: What decisions can the manager make?
+
+Sarah: The manager can either approve or reject. If the manager rejects the claim, they must provide a reason, and a rejection notification is sent back to the employee. If the manager approves, it then moves forward to the Senior Financial Auditor for final audit.
+
+Interviewer: What does the Senior Financial Auditor do?
+
+Sarah: The auditor verifies tax compliance and receipts. If everything is verified, they authorize the payment, triggering the Accounts Payable department to release the funds and notify the employee. If not approved by the auditor, it is returned to the employee for resubmission with updated documentation.

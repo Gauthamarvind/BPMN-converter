@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Process_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Process2BPMN" exporterVersion="1.0.0">
+  <bpmn:collaboration id="Collaboration_Process_1">
+    <bpmn:participant id="Participant_1" name="Sample Interview Transcript" processRef="Process_1"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_1" name="Sample Interview Transcript" isExecutable="false">
+    <bpmn:documentation>Generated from: Sample Interview Transcript</bpmn:documentation>
+    <bpmn:laneSet id="LaneSet_Process_1">
+      <bpmn:lane id="Lane_1" name="Finance Lead (Sarah)">
+        <bpmn:flowNodeRef>Event_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_2</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_2" name="Interviewer">
+        <bpmn:flowNodeRef>Activity_1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_5</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_7</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_9</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_3" name="Sarah">
+        <bpmn:flowNodeRef>Activity_6</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_4" name="it skips managerial approval and goes directly to the Automated Accounting Bot">
+        <bpmn:flowNodeRef>Activity_4</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_5" name="they authorize the payment">
+        <bpmn:flowNodeRef>Activity_10</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_6" name="they must provide a reason">
+        <bpmn:flowNodeRef>Activity_8</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Event_start" name="Start">
+      <bpmn:outgoing>Flow_Event_start_Activity_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Activity_1" name="Can you walk me through what happens when an employee submit">
+      <bpmn:documentation>Interviewer: Can you walk me through what happens when an employee submits a new business travel expense report?</bpmn:documentation>
+      <bpmn:incoming>Flow_Event_start_Activity_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_1_Activity_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_2" name="Sure. The employee logs into the expense portal and uploads ">
+      <bpmn:documentation>Finance Lead (Sarah): Sure. The employee logs into the expense portal and uploads all itemized receipts along with the business purpose. Once submitted, the portal automatically verifies if the total is under $500.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_1_Activity_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_2_Activity_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_3" name="What if it's under $500?">
+      <bpmn:documentation>Interviewer: What if it's under $500?</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_2_Activity_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_3_Activity_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:serviceTask id="Activity_4" name="which runs a policy compliance check. If the policy check passes">
+      <bpmn:documentation>Sarah: If the expense is less than or equal to $500, it skips managerial approval and goes directly to the Automated Accounting Bot, which runs a policy compliance check. If the policy check passes, the accounting system schedules an automated bank transfer and emails the payment confirmation to the employee. If the policy check flags any issues, it gets routed to a Senior Financial Auditor for manual audit.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_3_Activity_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_4_Activity_5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:task id="Activity_5" name="And what if the amount exceeds $500?">
+      <bpmn:documentation>Interviewer: And what if the amount exceeds $500?</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_4_Activity_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_5_Activity_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_6" name="If the amount is greater than $500, the system routes the ex">
+      <bpmn:documentation>Sarah: If the amount is greater than $500, the system routes the expense report to the Employee's Direct Department Manager. The manager has 3 business days to review the receipts and justify the business need.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_5_Activity_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_6_Activity_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_7" name="What decisions can the manager make?">
+      <bpmn:documentation>Interviewer: What decisions can the manager make?</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_6_Activity_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_7_Activity_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_8" name="and a rejection notification is sent back to the employee. If the manager approves">
+      <bpmn:documentation>Sarah: The manager can either approve or reject. If the manager rejects the claim, they must provide a reason, and a rejection notification is sent back to the employee. If the manager approves, it then moves forward to the Senior Financial Auditor for final audit.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_7_Activity_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_8_Activity_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_9" name="What does the Senior Financial Auditor do?">
+      <bpmn:documentation>Interviewer: What does the Senior Financial Auditor do?</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_8_Activity_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_9_Activity_10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_10" name="triggering the Accounts Payable department to release the funds and notify the employee. If not a...">
+      <bpmn:documentation>Sarah: The auditor verifies tax compliance and receipts. If everything is verified, they authorize the payment, triggering the Accounts Payable department to release the funds and notify the employee. If not approved by the auditor, it is returned to the employee for resubmission with updated documentation.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_9_Activity_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_10_Event_end</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="Event_end" name="End">
+      <bpmn:incoming>Flow_Activity_10_Event_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Event_start_Activity_1" sourceRef="Event_start" targetRef="Activity_1"/>
+    <bpmn:sequenceFlow id="Flow_Activity_1_Activity_2" sourceRef="Activity_1" targetRef="Activity_2"/>
+    <bpmn:sequenceFlow id="Flow_Activity_2_Activity_3" sourceRef="Activity_2" targetRef="Activity_3"/>
+    <bpmn:sequenceFlow id="Flow_Activity_3_Activity_4" sourceRef="Activity_3" targetRef="Activity_4"/>
+    <bpmn:sequenceFlow id="Flow_Activity_4_Activity_5" sourceRef="Activity_4" targetRef="Activity_5"/>
+    <bpmn:sequenceFlow id="Flow_Activity_5_Activity_6" sourceRef="Activity_5" targetRef="Activity_6"/>
+    <bpmn:sequenceFlow id="Flow_Activity_6_Activity_7" sourceRef="Activity_6" targetRef="Activity_7"/>
+    <bpmn:sequenceFlow id="Flow_Activity_7_Activity_8" sourceRef="Activity_7" targetRef="Activity_8"/>
+    <bpmn:sequenceFlow id="Flow_Activity_8_Activity_9" sourceRef="Activity_8" targetRef="Activity_9"/>
+    <bpmn:sequenceFlow id="Flow_Activity_9_Activity_10" sourceRef="Activity_9" targetRef="Activity_10"/>
+    <bpmn:sequenceFlow id="Flow_Activity_10_Event_end" sourceRef="Activity_10" targetRef="Event_end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_1" bpmnElement="Collaboration_Process_1">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_1" bpmnElement="Participant_1" isHorizontal="true">
+        <dc:Bounds x="140.0" y="80.0" width="2540.0" height="1080.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_1" bpmnElement="Lane_1" isHorizontal="true">
+        <dc:Bounds x="170.0" y="80.0" width="2510.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_2" bpmnElement="Lane_2" isHorizontal="true">
+        <dc:Bounds x="170.0" y="260.0" width="2510.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_3" bpmnElement="Lane_3" isHorizontal="true">
+        <dc:Bounds x="170.0" y="440.0" width="2510.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_4" bpmnElement="Lane_4" isHorizontal="true">
+        <dc:Bounds x="170.0" y="620.0" width="2510.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_5" bpmnElement="Lane_5" isHorizontal="true">
+        <dc:Bounds x="170.0" y="800.0" width="2510.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_6" bpmnElement="Lane_6" isHorizontal="true">
+        <dc:Bounds x="170.0" y="980.0" width="2510.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Event_start" bpmnElement="Event_start">
+        <dc:Bounds x="220.0" y="152.0" width="36.0" height="36.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="195.0" y="194.0" width="86.0" height="24.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_1" bpmnElement="Activity_1">
+        <dc:Bounds x="400.0" y="310.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_2" bpmnElement="Activity_2">
+        <dc:Bounds x="580.0" y="130.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_3" bpmnElement="Activity_3">
+        <dc:Bounds x="760.0" y="310.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_4" bpmnElement="Activity_4">
+        <dc:Bounds x="940.0" y="670.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_5" bpmnElement="Activity_5">
+        <dc:Bounds x="1120.0" y="310.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_6" bpmnElement="Activity_6">
+        <dc:Bounds x="1300.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_7" bpmnElement="Activity_7">
+        <dc:Bounds x="1480.0" y="310.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_8" bpmnElement="Activity_8">
+        <dc:Bounds x="1660.0" y="1030.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_9" bpmnElement="Activity_9">
+        <dc:Bounds x="1840.0" y="310.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_10" bpmnElement="Activity_10">
+        <dc:Bounds x="2020.0" y="850.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Event_end" bpmnElement="Event_end">
+        <dc:Bounds x="2200.0" y="1052.0" width="36.0" height="36.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2175.0" y="1094.0" width="86.0" height="24.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Event_start_Activity_1" bpmnElement="Flow_Event_start_Activity_1">
+        <di:waypoint x="256.0" y="170.0"/>
+        <di:waypoint x="328.0" y="170.0"/>
+        <di:waypoint x="328.0" y="350.0"/>
+        <di:waypoint x="400.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_1_Activity_2" bpmnElement="Flow_Activity_1_Activity_2">
+        <di:waypoint x="500.0" y="350.0"/>
+        <di:waypoint x="540.0" y="350.0"/>
+        <di:waypoint x="540.0" y="170.0"/>
+        <di:waypoint x="580.0" y="170.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_2_Activity_3" bpmnElement="Flow_Activity_2_Activity_3">
+        <di:waypoint x="680.0" y="170.0"/>
+        <di:waypoint x="720.0" y="170.0"/>
+        <di:waypoint x="720.0" y="350.0"/>
+        <di:waypoint x="760.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_3_Activity_4" bpmnElement="Flow_Activity_3_Activity_4">
+        <di:waypoint x="860.0" y="350.0"/>
+        <di:waypoint x="900.0" y="350.0"/>
+        <di:waypoint x="900.0" y="710.0"/>
+        <di:waypoint x="940.0" y="710.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_4_Activity_5" bpmnElement="Flow_Activity_4_Activity_5">
+        <di:waypoint x="1040.0" y="710.0"/>
+        <di:waypoint x="1080.0" y="710.0"/>
+        <di:waypoint x="1080.0" y="350.0"/>
+        <di:waypoint x="1120.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_5_Activity_6" bpmnElement="Flow_Activity_5_Activity_6">
+        <di:waypoint x="1220.0" y="350.0"/>
+        <di:waypoint x="1260.0" y="350.0"/>
+        <di:waypoint x="1260.0" y="530.0"/>
+        <di:waypoint x="1300.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_6_Activity_7" bpmnElement="Flow_Activity_6_Activity_7">
+        <di:waypoint x="1400.0" y="530.0"/>
+        <di:waypoint x="1440.0" y="530.0"/>
+        <di:waypoint x="1440.0" y="350.0"/>
+        <di:waypoint x="1480.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_7_Activity_8" bpmnElement="Flow_Activity_7_Activity_8">
+        <di:waypoint x="1580.0" y="350.0"/>
+        <di:waypoint x="1620.0" y="350.0"/>
+        <di:waypoint x="1620.0" y="1070.0"/>
+        <di:waypoint x="1660.0" y="1070.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_8_Activity_9" bpmnElement="Flow_Activity_8_Activity_9">
+        <di:waypoint x="1760.0" y="1070.0"/>
+        <di:waypoint x="1800.0" y="1070.0"/>
+        <di:waypoint x="1800.0" y="350.0"/>
+        <di:waypoint x="1840.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_9_Activity_10" bpmnElement="Flow_Activity_9_Activity_10">
+        <di:waypoint x="1940.0" y="350.0"/>
+        <di:waypoint x="1980.0" y="350.0"/>
+        <di:waypoint x="1980.0" y="890.0"/>
+        <di:waypoint x="2020.0" y="890.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_10_Event_end" bpmnElement="Flow_Activity_10_Event_end">
+        <di:waypoint x="2120.0" y="890.0"/>
+        <di:waypoint x="2160.0" y="890.0"/>
+        <di:waypoint x="2160.0" y="1070.0"/>
+        <di:waypoint x="2200.0" y="1070.0"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

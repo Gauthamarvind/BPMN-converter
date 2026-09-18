@@ -1,0 +1,11 @@
+{
+  "profile_id": "profile_default_camunda",
+  "base_profile": "camunda",
+  "displayName": "Camunda Conformance (Camunda 8 Reference Template)",
+  "source_vendor": "camunda",
+  "targetVendor": "camunda",
+  "custom_namespaces": {},
+  "exporter": "Camunda Modeler",
+  "exporterVersion": "5.20.0",
+  "description": "Auto-derived export profile from reference template 'Camunda 8 Reference Template'."
+}

@@ -1,0 +1,11 @@
+{
+  "profile_id": "profile_default_celonis",
+  "base_profile": "celonis",
+  "displayName": "Celonis Conformance (Celonis EMS Execution Template)",
+  "source_vendor": "celonis",
+  "targetVendor": "celonis",
+  "custom_namespaces": {},
+  "exporter": "Celonis Process Mining",
+  "exporterVersion": "4.8",
+  "description": "Auto-derived export profile from reference template 'Celonis EMS Execution Template'."
+}
