@@ -68,6 +68,25 @@ export function describeApiError(status: number, body: ApiErrorBody | null | und
         title: 'The template has rows that need fixing',
         message: 'Open the Issues tab to see each row and what to change. Conversion continues once the errors are resolved.',
       };
+    case 'ExportBlockedError':
+      return {
+        kind,
+        details: raw,
+        title: 'Export blocked by validation errors',
+        message:
+          'The process still has unreachable steps or unlabeled decision branches. Fix them in the source (see the Issues tab) and convert again before exporting.',
+      };
+    case 'AuthenticationRequired':
+      return { kind, details: raw, title: 'Sign-in required', message: raw };
+    case 'Forbidden':
+      return { kind, details: raw, title: 'Not allowed', message: raw };
+    case 'ServerBusy':
+      return {
+        kind,
+        details: raw,
+        title: 'The server is busy',
+        message: 'All extraction slots are in use right now. Wait a few seconds and try again.',
+      };
     case 'BpmnSchemaError':
       return {
         kind,
@@ -76,6 +95,9 @@ export function describeApiError(status: number, body: ApiErrorBody | null | und
         message: 'This is a bug in the exporter rather than in your input. Please report it with the file you converted.',
       };
     default:
+      if (status === 429) {
+        return { kind, details: raw, title: 'Too many requests', message: raw };
+      }
       if (status === 413) {
         return { kind, details: raw, title: 'File is too large', message: 'The limit is 20 MB. Split the document or paste the relevant section as text.' };
       }

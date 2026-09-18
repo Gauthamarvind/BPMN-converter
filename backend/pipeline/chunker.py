@@ -56,6 +56,30 @@ class ProcessExtractor:
 
         return chunks if chunks else [text]
 
+    def render_prompt(self, chunk_text: str, title: str, pools_hint: str = "") -> str:
+        """
+        Fills the extraction template. The template uses ``{{CHUNK_TEXT}}`` / ``{{POOLS_HINT}}``;
+        older copies used ``{{CHUNK_CONTENT}}`` / ``{{PROCESS_TITLE}}``. Both spellings are
+        substituted so a customised prompt file can never silently drop the document text.
+        """
+        hint = pools_hint or (
+            f"Process title: {title}. No pools or lanes are known yet; derive them from the actors, "
+            f"departments and systems named in the text."
+        )
+        prompt = (
+            self.extract_template
+            .replace("{{CHUNK_TEXT}}", chunk_text)
+            .replace("{{CHUNK_CONTENT}}", chunk_text)
+            .replace("{{POOLS_HINT}}", hint)
+            .replace("{{PROCESS_TITLE}}", title)
+        )
+        if chunk_text and chunk_text not in prompt:
+            raise RuntimeError(
+                "Extraction prompt template has no chunk placeholder ({{CHUNK_TEXT}}); the document "
+                "text would not reach the model. Check prompts/extract_chunk.md."
+            )
+        return prompt
+
     def extract(self, text: str, title: str = "Extracted Business Process") -> Tuple[ProcessIR, Dict[str, Any]]:
         """
         Main extraction entry point.
@@ -70,7 +94,7 @@ class ProcessExtractor:
 
         # Single chunk path
         if total_tokens <= chunk_token_limit:
-            prompt = self.extract_template.replace("{{CHUNK_CONTENT}}", text).replace("{{PROCESS_TITLE}}", title)
+            prompt = self.render_prompt(text, title)
             ir, usage = extract_with_self_healing(
                 provider=self.provider,
                 prompt=prompt,
@@ -87,7 +111,13 @@ class ProcessExtractor:
         fragments: List[ProcessIR] = []
         for idx, chunk in enumerate(chunks, start=1):
             chunk_header = f"=== Chunk {idx}/{len(chunks)} ===\n{chunk}"
-            prompt = self.extract_template.replace("{{CHUNK_CONTENT}}", chunk_header).replace("{{PROCESS_TITLE}}", f"{title} (Part {idx})")
+            pools_hint = ""
+            if fragments:
+                # Give later chunks the lanes already discovered so IDs and roles stay consistent.
+                known = sorted({l.name for fr in fragments for p in fr.pools for l in p.lanes})
+                if known:
+                    pools_hint = "Lanes already identified in earlier chunks (reuse these names): " + ", ".join(known)
+            prompt = self.render_prompt(chunk_header, f"{title} (Part {idx})", pools_hint)
             frag_ir, usage = extract_with_self_healing(
                 provider=self.provider,
                 prompt=prompt,
@@ -131,42 +161,111 @@ class ProcessExtractor:
         return self._deterministic_union(fragments, title)
 
     def _deterministic_union(self, fragments: List[ProcessIR], title: str) -> ProcessIR:
-        pools_by_id = {}
-        elements_by_id = {}
-        flows_by_id = {}
-        data_by_id = {}
-        questions = []
+        """
+        Merge fragments without a model, without losing anything.
 
-        for frag in fragments:
+        Each fragment was extracted independently, so IDs such as ``Lane_1`` or
+        ``Activity_1`` collide across fragments. Every fragment is namespaced with a
+        ``f<n>_`` prefix first; lanes are then unified by *name* (the only stable key),
+        only the first fragment keeps its start events and only the last keeps its end
+        events, and each fragment's terminal nodes are stitched to the next fragment's
+        first activity so the result is one connected process. Anything still ambiguous
+        is left for the validator to report.
+        """
+        if not fragments:
+            return ProcessIR(id="Process_Merged", name=title)
+        if len(fragments) == 1:
+            return fragments[0]
+
+        lanes_by_name: Dict[str, Lane] = {}
+        pool_name = fragments[0].pools[0].name if fragments[0].pools else title
+        elements: List[FlowNode] = []
+        flows: List[SequenceFlow] = []
+        data_objects: List[DataObject] = []
+        questions: List[OpenQuestion] = []
+        last_fragment = len(fragments) - 1
+        prev_terminals: List[str] = []
+
+        for idx, frag in enumerate(fragments):
+            prefix = f"f{idx + 1}_"
+            lane_remap: Dict[str, str] = {}
             for p in frag.pools:
-                if p.id not in pools_by_id:
-                    pools_by_id[p.id] = p
-                else:
-                    existing_lane_ids = {l.id for l in pools_by_id[p.id].lanes}
-                    for l in p.lanes:
-                        if l.id not in existing_lane_ids:
-                            pools_by_id[p.id].lanes.append(l)
+                for l in p.lanes:
+                    key = (l.name or l.id).strip().lower()
+                    if key not in lanes_by_name:
+                        lanes_by_name[key] = Lane(id=f"Lane_{len(lanes_by_name) + 1}", name=l.name or l.id)
+                    lane_remap[l.id] = lanes_by_name[key].id
 
-            for elem in frag.elements:
-                if elem.id not in elements_by_id:
-                    elements_by_id[elem.id] = elem
+            id_remap: Dict[str, str] = {}
+            kept: List[FlowNode] = []
+            for e in frag.elements:
+                if e.type == "startEvent" and idx != 0:
+                    continue
+                if e.type == "endEvent" and idx != last_fragment:
+                    continue
+                new_id = prefix + e.id
+                id_remap[e.id] = new_id
+                kept.append(FlowNode(
+                    id=new_id,
+                    type=e.type,
+                    name=e.name,
+                    laneId=lane_remap.get(e.laneId, e.laneId),
+                    documentation=e.documentation,
+                    timerDuration=e.timerDuration,
+                    confidence=e.confidence,
+                    sourceRefs=list(e.sourceRefs),
+                ))
+            elements.extend(kept)
 
-            for flow in frag.flows:
-                if flow.id not in flows_by_id:
-                    flows_by_id[flow.id] = flow
+            frag_flows: List[SequenceFlow] = []
+            for f in frag.flows:
+                if f.sourceId in id_remap and f.targetId in id_remap:
+                    frag_flows.append(SequenceFlow(
+                        id=prefix + f.id,
+                        type=f.type,
+                        sourceId=id_remap[f.sourceId],
+                        targetId=id_remap[f.targetId],
+                        name=f.name,
+                        condition=f.condition,
+                        isDefault=f.isDefault,
+                    ))
+            flows.extend(frag_flows)
+
+            # Stitch: previous fragment's dangling ends -> this fragment's first activity
+            incoming = {f.targetId for f in frag_flows}
+            entry_candidates = [e.id for e in kept if e.type != "startEvent" and e.id not in incoming]
+            entry = entry_candidates[0] if entry_candidates else (kept[0].id if kept else None)
+            if entry and prev_terminals:
+                for t_idx, term in enumerate(prev_terminals):
+                    flows.append(SequenceFlow(
+                        id=f"Flow_stitch_{idx}_{t_idx + 1}",
+                        sourceId=term,
+                        targetId=entry,
+                        name="",
+                    ))
+                if len(prev_terminals) > 1:
+                    questions.append(OpenQuestion(
+                        topic="Chunk Boundary",
+                        question=(
+                            f"Fragment {idx} ended with {len(prev_terminals)} open branches that were all "
+                            f"joined into '{entry}'. Confirm this is the intended continuation."
+                        ),
+                    ))
+
+            outgoing = {f.sourceId for f in frag_flows}
+            prev_terminals = [e.id for e in kept if e.type != "endEvent" and e.id not in outgoing]
 
             for d in frag.dataObjects:
-                if d.id not in data_by_id:
-                    data_by_id[d.id] = d
-
+                data_objects.append(DataObject(id=prefix + d.id, name=d.name, itemSubjectRef=d.itemSubjectRef))
             questions.extend(frag.openQuestions)
 
+        pool = Pool(id="Participant_1", name=pool_name, lanes=list(lanes_by_name.values()))
         return ProcessIR(
             id="Process_Merged",
             name=title,
-            pools=list(pools_by_id.values()),
-            elements=list(elements_by_id.values()),
-            flows=list(flows_by_id.values()),
-            dataObjects=list(data_by_id.values()),
-            openQuestions=questions
+            pools=[pool],
+            elements=elements,
+            flows=flows,
+            dataObjects=data_objects,
+            openQuestions=questions,
         )

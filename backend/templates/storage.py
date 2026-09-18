@@ -19,6 +19,7 @@ from backend.templates.models import (
 )
 from backend.templates.bpmn_parser import BpmnTemplateParser
 from backend.templates.profile_derivator import derive_profile_from_template
+from backend.identity import safe_identifier, slugify, LOCAL_USER
 
 _DEFAULT_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "templates"
 
@@ -197,12 +198,70 @@ CELONIS_SAMPLE_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 class TemplateStorage:
     """
     Manages filesystem storage for templates in /data/templates/<id>/
+
+    Every public method that takes a ``template_id`` validates it with
+    ``safe_identifier`` and checks the resolved path stays inside ``root_dir`` — a
+    template id is a directory name, so ``..`` must never reach the filesystem.
+
+    Multi-user scoping: built-in templates (``is_builtin``) are visible to everyone and
+    cannot be deleted. Uploaded templates carry ``owner_id`` and are only listed, used,
+    and deleted by their owner (``LOCAL_USER`` sees everything, which keeps the
+    single-user setup unchanged). "Default" is stored per user under ``_prefs/``.
     """
 
+    PREFS_DIR = "_prefs"
+
     def __init__(self, root_dir: Optional[Path] = None):
-        self.root_dir = Path(root_dir or _DEFAULT_STORAGE_DIR)
+        self.root_dir = Path(root_dir or _DEFAULT_STORAGE_DIR).resolve()
         self.root_dir.mkdir(parents=True, exist_ok=True)
+        (self.root_dir / self.PREFS_DIR).mkdir(parents=True, exist_ok=True)
         self._ensure_defaults()
+
+    # ------------------------------------------------------------------ helpers
+    def _folder(self, template_id: str) -> Path:
+        tid = safe_identifier(template_id, "template id")
+        folder = (self.root_dir / tid).resolve()
+        if folder.parent != self.root_dir:
+            raise ValueError(f"Invalid template id '{template_id}'.")
+        return folder
+
+    @staticmethod
+    def _can_see(meta: TemplateMetadata, user_id: Optional[str]) -> bool:
+        if user_id in (None, LOCAL_USER):
+            return True
+        return meta.is_builtin or not meta.owner_id or meta.owner_id == user_id
+
+    @staticmethod
+    def _can_modify(meta: TemplateMetadata, user_id: Optional[str]) -> bool:
+        if meta.is_builtin:
+            return user_id in (None, LOCAL_USER)
+        if user_id in (None, LOCAL_USER):
+            return True
+        return meta.owner_id == user_id
+
+    def _prefs_file(self, user_id: str) -> Path:
+        return self.root_dir / self.PREFS_DIR / f"{slugify(user_id, 'user', 80)}.json"
+
+    def _read_prefs(self, user_id: str) -> Dict[str, Any]:
+        f = self._prefs_file(user_id)
+        if f.exists():
+            try:
+                return json.loads(f.read_text(encoding="utf-8"))
+            except Exception:
+                return {}
+        return {}
+
+    def _write_prefs(self, user_id: str, prefs: Dict[str, Any]) -> None:
+        self._prefs_file(user_id).write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+    def _read_meta(self, folder: Path) -> Optional[TemplateMetadata]:
+        meta_file = folder / "metadata.json"
+        if not meta_file.exists():
+            return None
+        try:
+            return TemplateMetadata(**json.loads(meta_file.read_text(encoding="utf-8")))
+        except Exception:
+            return None
 
     def _ensure_defaults(self):
         """Initializes built-in templates if not already present."""
@@ -220,37 +279,48 @@ class TemplateStorage:
                     name=name,
                     xml_content=xml_content,
                     filename=f"{tid}.bpmn",
-                    is_default=(tid == "default_camunda")
+                    is_default=(tid == "default_camunda"),
+                    is_builtin=True,
                 )
+            else:
+                # Older installs have no is_builtin flag; stamp it so they cannot be deleted.
+                meta = self._read_meta(folder)
+                if meta and not meta.is_builtin:
+                    meta.is_builtin = True
+                    (folder / "metadata.json").write_text(json.dumps(meta.model_dump(), indent=2), encoding="utf-8")
 
-    def list_templates(self) -> List[TemplateMetadata]:
+    # ------------------------------------------------------------------ queries
+    def list_templates(self, user_id: Optional[str] = None) -> List[TemplateMetadata]:
         results: List[TemplateMetadata] = []
         if not self.root_dir.exists():
             return results
+        prefs = self._read_prefs(user_id) if user_id else {}
+        user_default = prefs.get("default_template_id")
 
         for sub in sorted(self.root_dir.iterdir()):
-            if sub.is_dir():
-                meta_file = sub / "metadata.json"
-                if meta_file.exists():
-                    try:
-                        data = json.loads(meta_file.read_text(encoding="utf-8"))
-                        results.append(TemplateMetadata(**data))
-                    except Exception:
-                        pass
+            if not sub.is_dir() or sub.name.startswith("_"):
+                continue
+            meta = self._read_meta(sub)
+            if not meta or not self._can_see(meta, user_id):
+                continue
+            if user_default:
+                meta.is_default = (meta.id == user_default)
+            results.append(meta)
         return results
 
-    def get_template(self, template_id: str) -> Optional[Tuple[TemplateMetadata, str, TemplateSpec]]:
-        folder = self.root_dir / template_id
+    def get_template(self, template_id: str, user_id: Optional[str] = None) -> Optional[Tuple[TemplateMetadata, str, TemplateSpec]]:
+        try:
+            folder = self._folder(template_id)
+        except ValueError:
+            return None
         if not folder.exists():
             return None
 
-        meta_file = folder / "metadata.json"
-        if not meta_file.exists():
+        meta = self._read_meta(folder)
+        if not meta or not self._can_see(meta, user_id):
             return None
 
-        meta = TemplateMetadata(**json.loads(meta_file.read_text(encoding="utf-8")))
-
-        template_file = folder / meta.filename
+        template_file = folder / Path(meta.filename).name
         if not template_file.exists():
             return None
 
@@ -264,6 +334,33 @@ class TemplateStorage:
 
         return meta, content, spec
 
+    # ------------------------------------------------------------------ writes
+    def save_template(
+        self,
+        xml_content: str,
+        filename: str = "template.bpmn",
+        name: Optional[str] = None,
+        description: str = "",
+        owner_id: str = "",
+    ) -> Tuple[TemplateMetadata, TemplateDetectionReport]:
+        """
+        Registers an uploaded reference BPMN file under a generated, path-safe id
+        (``tpl_<slug>_<timestamp>``). Called by ``POST /api/templates``.
+        """
+        stem = Path(filename or "template.bpmn").stem
+        display_name = (name or "").strip() or stem.replace("_", " ").strip() or "Reference Template"
+        template_id = f"tpl_{slugify(display_name)}_{int(time.time() * 1000) % 100000000}"
+        safe_filename = f"{slugify(stem, 'template')}.bpmn"
+        return self.save_bpmn_template(
+            template_id=template_id,
+            name=display_name,
+            xml_content=xml_content,
+            filename=safe_filename,
+            is_default=False,
+            description=description,
+            owner_id=owner_id,
+        )
+
     def save_bpmn_template(
         self,
         template_id: str,
@@ -271,13 +368,18 @@ class TemplateStorage:
         xml_content: str,
         filename: str = "template.bpmn",
         is_default: bool = False,
-        description: str = ""
+        description: str = "",
+        owner_id: str = "",
+        is_builtin: bool = False,
     ) -> Tuple[TemplateMetadata, TemplateDetectionReport]:
-        folder = self.root_dir / template_id
-        folder.mkdir(parents=True, exist_ok=True)
+        folder = self._folder(template_id)
+        filename = Path(filename).name or "template.bpmn"
 
+        # Parse (and reject unsafe XML) before touching the disk
         parser = BpmnTemplateParser(template_id, name, xml_content)
         spec, report = parser.parse()
+
+        folder.mkdir(parents=True, exist_ok=True)
 
         # Save template file
         dest_file = folder / filename
@@ -305,7 +407,9 @@ class TemplateStorage:
             description=description or f"Reference BPMN template conforming to {spec.source_vendor.title()}",
             pools_count=len(spec.pools),
             lanes_count=len(spec.get_all_lanes()),
-            skeleton_count=len(spec.skeleton_nodes)
+            skeleton_count=len(spec.skeleton_nodes),
+            owner_id=owner_id or "",
+            is_builtin=is_builtin,
         )
 
         meta_file = folder / "metadata.json"
@@ -313,25 +417,38 @@ class TemplateStorage:
 
         return meta, report
 
-    def delete_template(self, template_id: str) -> bool:
-        folder = self.root_dir / template_id
-        if folder.exists():
-            shutil.rmtree(folder, ignore_errors=True)
-            return True
-        return False
+    def delete_template(self, template_id: str, user_id: Optional[str] = None) -> bool:
+        """Returns True when deleted. Raises PermissionError for built-ins / other users' templates."""
+        folder = self._folder(template_id)
+        if not folder.exists():
+            return False
+        meta = self._read_meta(folder)
+        if meta and not self._can_modify(meta, user_id):
+            raise PermissionError("You cannot delete this template.")
+        shutil.rmtree(folder, ignore_errors=True)
+        return True
 
-    def set_default(self, template_id: str) -> bool:
-        found = False
-        for sub in self.root_dir.iterdir():
-            if sub.is_dir():
-                meta_file = sub / "metadata.json"
-                if meta_file.exists():
-                    try:
-                        data = json.loads(meta_file.read_text(encoding="utf-8"))
-                        data["is_default"] = (data.get("id") == template_id)
-                        meta_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
-                        if data["is_default"]:
-                            found = True
-                    except Exception:
-                        pass
-        return found
+    def set_default(self, template_id: str, user_id: Optional[str] = None) -> bool:
+        """
+        Marks a template as the caller's default. For the single-user setup the flag is
+        written to the metadata files (as before); for identified users it is stored in
+        their own preferences so one person's choice never changes another's.
+        """
+        folder = self._folder(template_id)
+        meta = self._read_meta(folder) if folder.exists() else None
+        if not meta or not self._can_see(meta, user_id):
+            return False
+
+        if user_id in (None, LOCAL_USER):
+            for sub in self.root_dir.iterdir():
+                if sub.is_dir() and not sub.name.startswith("_"):
+                    m = self._read_meta(sub)
+                    if m:
+                        m.is_default = (m.id == template_id)
+                        (sub / "metadata.json").write_text(json.dumps(m.model_dump(), indent=2), encoding="utf-8")
+            return True
+
+        prefs = self._read_prefs(user_id)
+        prefs["default_template_id"] = template_id
+        self._write_prefs(user_id, prefs)
+        return True

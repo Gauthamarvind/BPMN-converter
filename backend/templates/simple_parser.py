@@ -87,6 +87,60 @@ def normalize_str(val: Any) -> str:
     return str(val).strip()
 
 
+# Column detection: whole-word / phrase matching, evaluated most-specific first, so a column
+# called "Notes" no longer lands in "If No" and "Input" never matches "Output".
+_HEADER_RULES: List[Tuple[str, Tuple[str, ...]]] = [
+    ("step_id",        ("step id", "step no", "step number", "step #", "id", "no.", "#")),
+    ("if_yes",         ("if yes", "if yes step", "yes", "yes step", "on yes", "true")),
+    ("if_no",          ("if no", "if no step", "no", "no step", "on no", "false")),
+    ("parallel_group", ("parallel group", "parallel", "group", "concurrent")),
+    ("next_step",      ("next step", "next", "next steps", "successor", "goto")),
+    ("responsible",    ("responsible", "role", "actor", "owner", "performer", "lane", "department", "who")),
+    ("type",           ("type", "step type", "task type", "kind")),
+    ("description",    ("description", "details", "instructions", "notes")),
+    ("system",         ("system", "system/tool", "tool", "application", "app")),
+    ("input_data",     ("input", "inputs", "input data")),
+    ("output_data",    ("output", "outputs", "output data")),
+    ("duration",       ("duration", "sla", "time", "estimate")),
+    ("step",           ("step", "activity", "activity name", "task", "action", "name")),
+]
+
+
+def _normalize_header(name: Any) -> str:
+    txt = normalize_str(name).lower().replace("→", "->").replace("–", "-").replace("—", "-")
+    txt = re.sub(r"\s*->\s*", " -> ", txt)
+    txt = re.sub(r"[\s_]+", " ", txt).strip()
+    return txt
+
+
+def map_header_columns(names: List[Any], offset: int = 0) -> Dict[str, int]:
+    """
+    Maps a header row to canonical StepRow field names.
+
+    A header matches a rule when, after normalisation, it *equals* one of the rule's
+    phrases or starts with it followed by a separator (so "If Yes -> Step" and "If Yes
+    (step id)" match "if yes", but "Notes" does not match "no"). Rules are ordered
+    most-specific first and each canonical field is assigned once.
+    """
+    col_map: Dict[str, int] = {}
+    for idx, raw in enumerate(names):
+        h = _normalize_header(raw)
+        if not h:
+            continue
+        for field, phrases in _HEADER_RULES:
+            if field in col_map:
+                continue
+            hit = False
+            for ph in phrases:
+                if h == ph or h.startswith(ph + " ") or h.startswith(ph + "-") or h.startswith(ph + "("):
+                    hit = True
+                    break
+            if hit:
+                col_map[field] = idx + offset
+                break
+    return col_map
+
+
 def _looks_like_legacy_header(cells: List[str]) -> bool:
     """
     A step table with a step column, an actor/role column and an activity or next-step column
@@ -261,34 +315,7 @@ class SimpleTemplateParser:
             row_lower = [normalize_str(c).lower() for c in row]
             if any("step id" in c or c == "step" for c in row_lower) and any("responsible" in c or "type" in c for c in row_lower):
                 header_row_idx = r_idx
-                for c_idx, col_name in enumerate(row_lower, start=1):
-                    col_name_clean = col_name.replace("→", "->").replace("–", "-").strip()
-                    if "step id" in col_name_clean:
-                        col_map["step_id"] = c_idx
-                    elif col_name_clean == "step" or "activity" in col_name_clean:
-                        col_map["step"] = c_idx
-                    elif "responsible" in col_name_clean or "role" in col_name_clean:
-                        col_map["responsible"] = c_idx
-                    elif "type" in col_name_clean:
-                        col_map["type"] = c_idx
-                    elif "if yes" in col_name_clean or "yes" in col_name_clean:
-                        col_map["if_yes"] = c_idx
-                    elif "if no" in col_name_clean or "no" in col_name_clean:
-                        col_map["if_no"] = c_idx
-                    elif "parallel" in col_name_clean:
-                        col_map["parallel_group"] = c_idx
-                    elif "next" in col_name_clean:
-                        col_map["next_step"] = c_idx
-                    elif "description" in col_name_clean:
-                        col_map["description"] = c_idx
-                    elif "system" in col_name_clean or "tool" in col_name_clean:
-                        col_map["system"] = c_idx
-                    elif "input" in col_name_clean:
-                        col_map["input_data"] = c_idx
-                    elif "output" in col_name_clean:
-                        col_map["output_data"] = c_idx
-                    elif "duration" in col_name_clean:
-                        col_map["duration"] = c_idx
+                col_map = map_header_columns(list(row), offset=1)
                 break
 
         if header_row_idx == -1:
@@ -365,35 +392,7 @@ class SimpleTemplateParser:
         if not table:
             raise ValueError("No valid process table found in Word document.")
 
-        hdr_row = [normalize_str(c.text).lower().replace("→", "->").replace("–", "-").strip() for c in table.rows[0].cells]
-        col_map: Dict[str, int] = {}
-        for c_idx, c_name in enumerate(hdr_row):
-            if "step id" in c_name:
-                col_map["step_id"] = c_idx
-            elif c_name == "step" or "activity" in c_name:
-                col_map["step"] = c_idx
-            elif "responsible" in c_name or "role" in c_name:
-                col_map["responsible"] = c_idx
-            elif "type" in c_name:
-                col_map["type"] = c_idx
-            elif "if yes" in c_name or "yes" in c_name:
-                col_map["if_yes"] = c_idx
-            elif "if no" in c_name or "no" in c_name:
-                col_map["if_no"] = c_idx
-            elif "parallel" in c_name:
-                col_map["parallel_group"] = c_idx
-            elif "next" in c_name:
-                col_map["next_step"] = c_idx
-            elif "description" in c_name:
-                col_map["description"] = c_idx
-            elif "system" in c_name or "tool" in c_name:
-                col_map["system"] = c_idx
-            elif "input" in c_name:
-                col_map["input_data"] = c_idx
-            elif "output" in c_name:
-                col_map["output_data"] = c_idx
-            elif "duration" in c_name:
-                col_map["duration"] = c_idx
+        col_map: Dict[str, int] = map_header_columns([c.text for c in table.rows[0].cells])
 
         steps: List[StepRow] = []
         for r_idx, row in enumerate(table.rows[1:], start=2):
@@ -440,23 +439,7 @@ class SimpleTemplateParser:
             row_lower = [normalize_str(c).lower().replace("→", "->").replace("–", "-") for c in row]
             if any("step" in c for c in row_lower) and any("responsible" in c or "type" in c for c in row_lower):
                 header_idx = r_idx - 1
-                for c_idx, c_name in enumerate(row_lower):
-                    if "step id" in c_name:
-                        col_map["step_id"] = c_idx
-                    elif c_name == "step" or "activity" in c_name:
-                        col_map["step"] = c_idx
-                    elif "responsible" in c_name or "role" in c_name:
-                        col_map["responsible"] = c_idx
-                    elif "type" in c_name:
-                        col_map["type"] = c_idx
-                    elif "if yes" in c_name or "yes" in c_name:
-                        col_map["if_yes"] = c_idx
-                    elif "if no" in c_name or "no" in c_name:
-                        col_map["if_no"] = c_idx
-                    elif "parallel" in c_name:
-                        col_map["parallel_group"] = c_idx
-                    elif "next" in c_name:
-                        col_map["next_step"] = c_idx
+                col_map = map_header_columns(list(row))
                 break
 
         if header_idx == -1:
@@ -659,7 +642,29 @@ class SimpleTemplateParser:
                         message=f"Row {r}: Decision steps cannot be placed inside a parallel group."
                     ))
 
-        # 5. Parallel group member count check
+            # 5. Values that would be silently ignored are reported instead
+            if is_decision and s.next_step and s.next_step.strip():
+                warnings.append(RowIssue(
+                    row=r,
+                    column="Next Step",
+                    message=(
+                        f"Row {r}: Decision '{s.step}' has a Next Step ('{s.next_step.strip()}') that is ignored; "
+                        f"decisions branch only via 'If Yes' and 'If No'."
+                    ),
+                    severity="WARNING",
+                    fix="Clear Next Step"
+                ))
+            if is_end and s.next_step and s.next_step.strip():
+                warnings.append(RowIssue(
+                    row=r,
+                    column="Next Step",
+                    message=f"Row {r}: End step '{s.step}' has a Next Step that is ignored; an End step terminates the branch.",
+                    severity="WARNING",
+                    fix="Clear Next Step"
+                ))
+
+        # 6. Parallel group member count + contiguity check
+        row_index = {s.step_id.strip(): i for i, s in enumerate(steps)}
         for pg_name, members in parallel_groups.items():
             if len(members) < 2:
                 for m in members:
@@ -667,6 +672,21 @@ class SimpleTemplateParser:
                         row=m.row_number,
                         column="Parallel Group",
                         message=f"Row {m.row_number}: Parallel group '{pg_name}' must contain at least 2 steps (found {len(members)})."
+                    ))
+                continue
+            positions = sorted(row_index[m.step_id.strip()] for m in members)
+            if positions[-1] - positions[0] + 1 != len(positions):
+                # A step between two members would fall through (by row order) into the middle
+                # of the group and bypass the fork gateway, so the join could never complete.
+                for m in members:
+                    errors.append(RowIssue(
+                        row=m.row_number,
+                        column="Parallel Group",
+                        message=(
+                            f"Row {m.row_number}: Members of parallel group '{pg_name}' must be on consecutive rows; "
+                            f"move the rows together or give the intervening steps an explicit Next Step."
+                        ),
+                        fix="Move group rows together"
                     ))
 
         # 6. Reachability and Loop analysis

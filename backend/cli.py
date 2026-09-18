@@ -43,7 +43,7 @@ def _resolve_template_id(template: Optional[str], mock: bool) -> Optional[str]:
         return template
     tpl_path = Path(template)
     if tpl_path.exists():
-        template_id = f"tpl_{re.sub(r'[^A-Za-z0-9_]+', '_', tpl_path.stem)}"
+        template_id = f"tpl_{re.sub(r'[^A-Za-z0-9_]+', '_', tpl_path.stem).strip('_')[:40] or 'file'}"
         xml_content = tpl_path.read_text(encoding="utf-8")
         storage.save_bpmn_template(template_id, tpl_path.stem, xml_content, filename=tpl_path.name)
         print(f"[Process2BPMN] Imported reference template '{tpl_path.name}' as '{template_id}'.", file=sys.stderr)
@@ -60,14 +60,15 @@ def convert_file(
     model: Optional[str] = None,
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
-    template: Optional[str] = None
+    template: Optional[str] = None,
+    force: bool = False,
 ) -> str:
     """
     Converts a file to BPMN 2.0 XML using exactly the same pipeline as the HTTP API
     (signature-based template detection, validation policy, XSD validation, profile lint).
     """
     # Imported here to avoid a circular import (process_pipeline imports the mock extractor).
-    from backend.pipeline.process_pipeline import process_pipeline
+    from backend.pipeline.process_pipeline import process_pipeline, ExportBlockedError
 
     path = Path(input_path)
     if not path.exists():
@@ -103,11 +104,18 @@ def convert_file(
 
     xml_output = result["bpmn_xml"]
     if result.get("export_blocked"):
-        print(
-            "[Process2BPMN] Export is BLOCKED: the diagram has ERROR-level issues that need review "
-            "(see messages above). The XML is written for inspection only.",
-            file=sys.stderr,
-        )
+        if force:
+            print(
+                "[Process2BPMN] WARNING: exporting despite ERROR-level issues because --force was given. "
+                "The file is for inspection only and may not import cleanly.",
+                file=sys.stderr,
+            )
+        else:
+            raise ExportBlockedError(
+                "Export is BLOCKED: the diagram has ERROR-level issues that need review (see messages above). "
+                "Fix the input or re-run with --force to write the XML for inspection.",
+                issues=[i for i in result.get("validation_issues", []) if i.get("severity") == "ERROR"],
+            )
 
     if output_path:
         out_p = Path(output_path)
@@ -141,6 +149,10 @@ def main():
     convert_parser.add_argument("--model", help="LLM Model name")
     convert_parser.add_argument("--base-url", help="LLM Base URL (e.g., http://localhost:11434/v1)")
     convert_parser.add_argument("--api-key", help="LLM API Key")
+    convert_parser.add_argument(
+        "--force", action="store_true", default=False,
+        help="Write the BPMN file even when validation found blocking errors (exit code 0 instead of 2)"
+    )
 
     # Command: profiles
     subparsers.add_parser("profiles", help="List available target-tool export profiles")
@@ -148,6 +160,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "profiles":
+        from backend.pipeline.linter import ProfileLinter  # was missing: `profiles` crashed with NameError
         linter = ProfileLinter()
         for p in linter.list_available_profiles():
             data = linter.load_profile(p)
@@ -165,13 +178,15 @@ def main():
                 model=getattr(args, "model", None),
                 base_url=getattr(args, "base_url", None),
                 api_key=getattr(args, "api_key", None),
-                template=getattr(args, "template", None)
+                template=getattr(args, "template", None),
+                force=bool(getattr(args, "force", False)),
             )
             if not args.output:
                 print(xml)
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
+            # 2 = the process was converted but has blocking validation errors; 1 = any other failure
+            sys.exit(2 if e.__class__.__name__ == "ExportBlockedError" else 1)
     else:
         parser.print_help()
 

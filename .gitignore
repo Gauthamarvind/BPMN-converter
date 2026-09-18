@@ -13,10 +13,12 @@ __pycache__/
 .env.local
 .env.*.local
 
-# Dynamic User Templates
+# Dynamic User Templates and per-user preferences
 data/templates/tpl_*
+data/templates/_prefs/
 
 # OS & Editor files
 .DS_Store
 Thumbs.db
 *.log
+fixes.patch

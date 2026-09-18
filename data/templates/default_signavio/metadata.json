@@ -10,5 +10,7 @@
   "description": "Reference BPMN template conforming to Signavio",
   "pools_count": 1,
   "lanes_count": 3,
-  "skeleton_count": 1
+  "skeleton_count": 1,
+  "owner_id": "",
+  "is_builtin": true
 }

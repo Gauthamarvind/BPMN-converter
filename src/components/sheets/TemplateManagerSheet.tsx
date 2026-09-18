@@ -134,7 +134,10 @@ export const TemplateManagerSheet: React.FC<TemplateManagerSheetProps> = ({
     if (!confirm('Are you sure you want to delete this template?')) return;
     try {
       const res = await fetch(`/api/templates/${templateId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete template');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || 'Failed to delete template');
+      }
       loadTemplates();
       setSuccessMsg('Template deleted.');
     } catch (err: any) {
@@ -295,13 +298,15 @@ export const TemplateManagerSheet: React.FC<TemplateManagerSheetProps> = ({
                         <Star className="w-3.5 h-3.5 fill-current" />
                       </button>
 
-                      <button
-                        onClick={() => handleDelete(tpl.id)}
-                        title="Delete template"
-                        className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--danger)] hover:bg-[var(--danger-subtle)] transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {!tpl.is_builtin && (
+                        <button
+                          onClick={() => handleDelete(tpl.id)}
+                          title="Delete template"
+                          className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--danger)] hover:bg-[var(--danger-subtle)] transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
 
                       <button
                         onClick={() =>

@@ -130,6 +130,8 @@ class TemplateMetadata(BaseModel):
     upload_date: str = ""
     filename: str = ""
     is_default: bool = False
+    owner_id: str = ""        # "" = built-in / shared; otherwise the uploading user's identity
+    is_builtin: bool = False  # shipped with the app; cannot be deleted by users
     derived_profile: Optional[str] = None
     description: str = ""
     pools_count: int = 0

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   Trash2,
@@ -22,7 +22,11 @@ import { Input } from '../ui/Field';
 export interface StepBuilderSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onConvertToDiagram: (file: File, processName: string) => Promise<void>;
+  /** Resolves true when the diagram was generated; false when conversion failed (errors are shown by the app). */
+  onConvertToDiagram: (file: File, processName: string) => Promise<boolean | void>;
+  /** Row-level validation errors from the last conversion attempt, shown inline next to the table. */
+  rowErrors?: RowValidationErrorItem[];
+  onNotify?: (title: string, message: string) => void;
 }
 
 const DEFAULT_ROLES = [
@@ -127,6 +131,8 @@ export const StepBuilderSheet: React.FC<StepBuilderSheetProps> = ({
   isOpen,
   onClose,
   onConvertToDiagram,
+  rowErrors,
+  onNotify,
 }) => {
   const [processName, setProcessName] = useState<string>('Employee Leave Request');
   const [roles, setRoles] = useState<string[]>(DEFAULT_ROLES);
@@ -222,7 +228,7 @@ export const StepBuilderSheet: React.FC<StepBuilderSheetProps> = ({
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(`Export error: ${err.message}`);
+      onNotify?.('Excel export failed', err?.message || 'Could not build the workbook.');
     } finally {
       setLoading(false);
     }
@@ -252,18 +258,24 @@ export const StepBuilderSheet: React.FC<StepBuilderSheetProps> = ({
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
 
-      await onConvertToDiagram(file, processName);
-      onClose();
-    } catch (err: any) {
-      if (err.row_errors) {
-        setValidationErrors(err.row_errors);
-      } else {
-        alert(err.message || 'Diagram generation failed.');
+      const ok = await onConvertToDiagram(file, processName);
+      if (ok !== false) {
+        onClose();
       }
+      // On failure the app surfaces the error; row errors arrive through the rowErrors prop.
+    } catch (err: any) {
+      onNotify?.('Diagram generation failed', err?.message || 'Unexpected error.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Mirror the app-level row errors into the sheet so the person sees them next to the table.
+  useEffect(() => {
+    if (rowErrors && rowErrors.length > 0) {
+      setValidationErrors(rowErrors);
+    }
+  }, [rowErrors]);
 
   const handleLoadSample = () => {
     setProcessName('Employee Leave Request');

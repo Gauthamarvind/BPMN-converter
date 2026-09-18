@@ -32,13 +32,20 @@ export interface Pool {
   lanes: Lane[];
 }
 
+export interface OpenQuestion {
+  topic: string;
+  question: string;
+  suggestedAssumption?: string;
+}
+
 export interface ProcessIR {
   id: string;
   name: string;
   elements: FlowNode[];
   flows: SequenceFlow[];
   pools: Pool[];
-  open_questions?: string[];
+  /** Ambiguities the extractor or validator could not resolve (server key: openQuestions). */
+  openQuestions?: OpenQuestion[];
   assumptions?: string[];
   templateBindings?: {
     templateId: string;
@@ -105,6 +112,8 @@ export interface TemplateRecord {
   pools_count?: number;
   lanes_count?: number;
   skeleton_count?: number;
+  owner_id?: string;
+  is_builtin?: boolean;
 }
 
 export interface AvailableLane {
@@ -134,7 +143,6 @@ export interface TemplateValidationReport {
 export interface BulkExportData {
   process_name: string;
   supported_profiles: string[];
-  bpmn_by_profile: Record<string, string>;
   available_formats: string[];
 }
 
@@ -203,6 +211,9 @@ export interface LLMSettings {
 
 /** What the server loaded from .env (GET /api/health). The key itself is never sent. */
 export interface ServerConfig {
+  auth_mode?: 'none' | 'proxy' | 'token';
+  /** false = the deployment ignores per-request provider/model/base_url/api_key (server key is used). */
+  client_llm_overrides?: boolean;
   active_provider: string;
   active_model: string;
   base_url: string;

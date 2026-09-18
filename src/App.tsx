@@ -293,7 +293,8 @@ export default function App() {
     }
   };
 
-  const handleFileUpload = async (file: File) => {
+  /** Converts an uploaded file. Resolves to true on success so callers (Step Builder) can decide whether to close. */
+  const handleFileUpload = async (file: File): Promise<boolean> => {
     setFilename(file.name);
     setFileSize(file.size);
     setLoading(true);
@@ -330,8 +331,10 @@ export default function App() {
       if (data.normalized_text) {
         setInputText(data.normalized_text);
       }
+      return true;
     } catch (err) {
       showUnexpectedError(err);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -341,18 +344,26 @@ export default function App() {
    * Re-renders the current diagram for another target tool, template or lane mapping
    * from the IR we already have. No model call, so it is instant and free.
    */
+  // Only the latest re-render may update the screen: switching profiles quickly fires
+  // several /api/render calls and the responses can arrive out of order.
+  const renderAbortRef = useRef<AbortController | null>(null);
+
   const rerenderFromIr = async (
     profile: string,
     templateId: string,
     currentLaneMap: Record<string, string>
   ) => {
     if (!processIr) return;
+    renderAbortRef.current?.abort();
+    const controller = new AbortController();
+    renderAbortRef.current = controller;
     setLoading(true);
     setSidebarError(null);
     try {
       const res = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           ir: processIr,
           profile,
@@ -361,15 +372,18 @@ export default function App() {
           filename,
         }),
       });
+      if (controller.signal.aborted) return;
       if (!res.ok) {
         await handleFailedResponse(res);
       }
       const data: ConversionResponse = await res.json();
+      if (controller.signal.aborted) return;
       applyConversionResult(data);
     } catch (err) {
+      if ((err as { name?: string })?.name === 'AbortError') return;
       showUnexpectedError(err);
     } finally {
-      setLoading(false);
+      if (renderAbortRef.current === controller) setLoading(false);
     }
   };
 
@@ -425,10 +439,14 @@ export default function App() {
     return Array.from(actorSet).filter(Boolean);
   }, [processIr, laneMap]);
 
+  // The badge counts things a person should look at: errors, warnings, lint findings,
+  // template row errors and open questions. INFO entries are auto-repairs and stay in
+  // the Issues tab under their own heading.
   const totalIssuesCount =
-    validationIssues.length +
+    validationIssues.filter((i) => i.severity !== 'INFO').length +
+    rowErrors.length +
     (lintResult?.warnings?.length || 0) +
-    (processIr?.open_questions?.length || 0);
+    (processIr?.openQuestions?.length || 0);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[var(--bg)] text-[var(--text)] overflow-hidden font-sans select-none">
@@ -504,7 +522,16 @@ export default function App() {
                   onSelectElement={handleElementSelectedInDiagram}
                   processName={processIr?.name || filename || 'process'}
                   bulkExport={bulkExport}
+                  processIr={processIr}
+                  templateId={selectedTemplateId}
+                  laneMap={laneMap}
                   isLoading={loading}
+                  onExportError={(title, message) =>
+                    setToast({ id: String(Date.now()), type: 'error', title, message })
+                  }
+                  onExportSuccess={(message) =>
+                    setToast({ id: String(Date.now()), type: 'success', title: 'Export ready', message })
+                  }
                 />
 
                 {/* Floating Controls */}
@@ -582,6 +609,10 @@ export default function App() {
         isOpen={isStepBuilderOpen}
         onClose={() => setIsStepBuilderOpen(false)}
         onConvertToDiagram={handleFileUpload}
+        rowErrors={rowErrors}
+        onNotify={(title, message) =>
+          setToast({ id: String(Date.now()), type: 'error', title, message })
+        }
       />
 
       <TemplateManagerSheet
