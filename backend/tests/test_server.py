@@ -78,6 +78,99 @@ class TestServerEndpoints(unittest.TestCase):
         data = res.json()
         self.assertIn("assumptions", data)
 
+    def test_convert_bulk_export_structure(self):
+        payload = {
+            "text": "1. Requester submits request.\n2. Approver evaluates request.\n3. Request approved.",
+            "filename": "approval_flow.txt",
+            "profile": "camunda",
+            "mock": True
+        }
+        res = self.client.post("/api/convert-json", json=payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["success"])
+        self.assertIn("bulk_export", data)
+        bulk = data["bulk_export"]
+        self.assertIn("process_name", bulk)
+        self.assertIn("supported_profiles", bulk)
+        self.assertIn("available_formats", bulk)
+        self.assertEqual(set(bulk["available_formats"]), {".bpmn", ".svg", ".png"})
+        self.assertIn("bpmn_by_profile", bulk)
+
+        for prof in ["generic", "camunda", "signavio", "celonis", "aris"]:
+            self.assertIn(prof, bulk["bpmn_by_profile"])
+            self.assertIn("bpmn:definitions", bulk["bpmn_by_profile"][prof])
+
+    def test_export_bulk_zip_endpoint(self):
+        import zipfile
+        import io
+        payload = {
+            "process_name": "Invoice Approval",
+            "bpmn_by_profile": {
+                "camunda": "<?xml version='1.0'?><bpmn:definitions></bpmn:definitions>",
+                "signavio": "<?xml version='1.0'?><bpmn:definitions></bpmn:definitions>",
+                "generic": "<?xml version='1.0'?><bpmn:definitions></bpmn:definitions>"
+            },
+            "svg": "<svg xmlns='http://www.w3.org/2000/svg'><rect width='100' height='100'/></svg>",
+            "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        }
+        res = self.client.post("/api/export/bulk", json=payload)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.headers.get("content-type"), "application/zip")
+
+        # Verify ZIP contents
+        zf = zipfile.ZipFile(io.BytesIO(res.content))
+        namelist = zf.namelist()
+        self.assertIn("invoice_approval_camunda.bpmn", namelist)
+        self.assertIn("invoice_approval_signavio.bpmn", namelist)
+        self.assertIn("invoice_approval_generic.bpmn", namelist)
+        self.assertIn("invoice_approval.svg", namelist)
+        self.assertIn("invoice_approval.png", namelist)
+        self.assertIn("README.txt", namelist)
+
+    def test_convert_multipart_upload(self):
+        text_content = b"1. Step one.\n2. Step two.\n3. Step three."
+        files = {"file": ("simple.txt", text_content, "text/plain")}
+        data = {"profile": "generic", "mock": "true"}
+        res = self.client.post("/api/convert", files=files, data=data)
+        self.assertEqual(res.status_code, 200)
+        json_data = res.json()
+        self.assertTrue(json_data["success"])
+
+    def test_convert_magic_bytes_mismatch_xlsx(self):
+        # Fake xlsx with invalid magic bytes (not PK)
+        fake_content = b"not a zip file content"
+        files = {"file": ("test.xlsx", fake_content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        res = self.client.post("/api/convert", files=files)
+        self.assertEqual(res.status_code, 415)
+        self.assertIn("PK zip signature", res.json()["detail"])
+
+    def test_convert_magic_bytes_mismatch_pdf(self):
+        # Fake pdf with invalid magic bytes (not %PDF)
+        fake_content = b"not a pdf file"
+        files = {"file": ("test.pdf", fake_content, "application/pdf")}
+        res = self.client.post("/api/convert", files=files)
+        self.assertEqual(res.status_code, 415)
+        self.assertIn("%PDF", res.json()["detail"])
+
+    def test_convert_size_limit_exceeded(self):
+        import backend.server as srv
+        original_limit = srv.MAX_UPLOAD_SIZE_BYTES
+        try:
+            srv.MAX_UPLOAD_SIZE_BYTES = 50  # 50 bytes limit for test
+            files = {"file": ("huge.txt", b"A" * 100, "text/plain")}
+            res = self.client.post("/api/convert", files=files)
+            self.assertEqual(res.status_code, 413)
+            self.assertIn("File exceeds maximum upload size limit", res.json()["detail"])
+        finally:
+            srv.MAX_UPLOAD_SIZE_BYTES = original_limit
+
+    def test_spa_fallback(self):
+        res = self.client.get("/")
+        # dist/ was compiled, so index.html is served
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("<!doctype html>", res.text.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

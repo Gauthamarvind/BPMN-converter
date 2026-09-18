@@ -141,7 +141,7 @@ export const SourceViewer: React.FC<SourceViewerProps> = ({
               type="file"
               ref={fileInputRef}
               onChange={handleFileChange}
-              accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.srt,.vtt,.json"
+              accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.srt,.vtt,.json,.pdf"
               className="hidden"
             />
             <div className="flex items-center gap-1">

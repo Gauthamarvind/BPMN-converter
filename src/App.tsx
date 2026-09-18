@@ -8,6 +8,7 @@ import {
   LintResult,
   LLMSettings,
   TemplateRecord,
+  BulkExportData,
 } from './types';
 import { BpmnViewerComponent } from './components/BpmnViewer';
 import { SourceViewer } from './components/SourceViewer';
@@ -52,6 +53,7 @@ export default function App() {
   const [selectedElementId, setSelectedElementId] = useState<string | undefined>(undefined);
   const [lintResult, setLintResult] = useState<LintResult | undefined>(undefined);
   const [conversionMeta, setConversionMeta] = useState<any>(null);
+  const [bulkExport, setBulkExport] = useState<BulkExportData | undefined>(undefined);
 
   const [isAmbiguityOpen, setIsAmbiguityOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -134,7 +136,7 @@ export default function App() {
         api_key: settings.apiKey,
       };
 
-      const res = await fetch('/api/convert', {
+      const res = await fetch('/api/convert-json', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -155,6 +157,7 @@ export default function App() {
       setNormalizedText(data.normalized_text);
       setLintResult(data.lint_result);
       setConversionMeta(data.metadata);
+      setBulkExport(data.bulk_export);
 
       // If backend returned template info with auto lane map, save it
       if (data.template_info?.lane_map) {
@@ -182,17 +185,66 @@ export default function App() {
     convertProcess(sample.content, sample.name, selectedProfileId, selectedTemplateId, laneMap);
   };
 
-  const handleFileUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (content) {
-        setInputText(content);
-        setFilename(file.name);
-        convertProcess(content, file.name, selectedProfileId, selectedTemplateId, laneMap);
+  const handleFileUpload = async (file: File) => {
+    setFilename(file.name);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (selectedProfileId) formData.append('profile', selectedProfileId);
+      if (selectedTemplateId) formData.append('template_id', selectedTemplateId);
+      if (laneMap && Object.keys(laneMap).length > 0) {
+        formData.append('lane_map', JSON.stringify(laneMap));
       }
-    };
-    reader.readAsText(file);
+      formData.append('mock', String(settings.provider === 'mock'));
+      if (settings.provider) formData.append('provider', settings.provider);
+      if (settings.model) formData.append('model', settings.model);
+      if (settings.baseUrl) formData.append('base_url', settings.baseUrl);
+      if (settings.apiKey) formData.append('api_key', settings.apiKey);
+
+      const res = await fetch('/api/convert', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || `Conversion failed: ${res.statusText}`);
+      }
+
+      const data: ConversionResponse = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Conversion failed');
+      }
+
+      setBpmnXml(data.bpmn_xml);
+      setProcessIr(data.ir);
+      setNormalizedText(data.normalized_text);
+      if (data.normalized_text) {
+        setInputText(data.normalized_text);
+      }
+      setLintResult(data.lint_result);
+      setConversionMeta(data.metadata);
+      setBulkExport(data.bulk_export);
+
+      if (data.template_info?.lane_map) {
+        setLaneMap((prev) => ({
+          ...prev,
+          ...data.template_info?.lane_map,
+        }));
+      }
+
+      if (data.ir.elements && data.ir.elements.length > 0) {
+        setSelectedElementId(data.ir.elements[0].id);
+      }
+    } catch (err: any) {
+      console.error('File upload conversion error:', err);
+      setError(err.message || 'An error occurred during file upload and conversion.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleProfileChange = async (newProfileId: string) => {
@@ -274,12 +326,12 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-bold text-sm tracking-tight text-stone-900">Process2BPMN</h1>
+                <h1 className="font-bold text-sm tracking-tight text-stone-900">Text2BPMN</h1>
                 <span className="px-1.5 py-0.2 bg-stone-100 text-stone-600 rounded text-[10px] font-mono font-medium border border-stone-200">
                   BPMN 2.0
                 </span>
                 <InfoTooltip
-                  title="Process2BPMN Pipeline"
+                  title="Text2BPMN Pipeline"
                   content="Converts unstructured or structured business process descriptions into compliant, standards-based BPMN 2.0 XML with deterministic Sugiyama layout."
                 />
               </div>
@@ -421,6 +473,7 @@ export default function App() {
             selectedElementId={selectedElementId}
             onSelectElement={handleElementSelectedInDiagram}
             processName={processIr?.name || filename || 'Process'}
+            bulkExport={bulkExport}
           />
         </div>
       </main>

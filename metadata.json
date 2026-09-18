@@ -1,6 +1,8 @@
 {
-  "name": "Process2BPMN",
+  "name": "Text2BPMN",
   "description": "Convert unstructured process descriptions into valid, importable BPMN 2.0 files.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

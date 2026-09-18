@@ -1,0 +1,13 @@
+fastapi==0.115.6
+uvicorn==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+httpx==0.28.1
+openpyxl==3.1.5
+python-docx==1.1.2
+pypdf==5.1.0
+pyyaml==6.0.2
+python-dotenv==1.0.1
+lxml==5.3.0
+xmlschema==3.4.3
+pytest==8.3.4

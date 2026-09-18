@@ -7,6 +7,11 @@ graph repair, Sugiyama layout, profile-based linter, and BPMN 2.0 XML serializat
 from __future__ import annotations
 import os
 import sys
+import re
+import io
+import time
+import base64
+import zipfile
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -16,6 +21,8 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -367,6 +374,38 @@ def process_pipeline(
         serializer = BpmnXmlSerializer(repaired_ir, layout, profile_config)
         bpmn_xml = serializer.serialize()
 
+    # 8. Multi-Profile Bulk Export Generation (Pre-render BPMN XML for all supported profiles)
+    supported_profiles = ["generic", "camunda", "signavio", "celonis", "aris"]
+    bpmn_by_profile: Dict[str, str] = {}
+    for p_name in supported_profiles:
+        if p_name == profile_name:
+            bpmn_by_profile[p_name] = bpmn_xml
+        else:
+            try:
+                p_cfg = linter.load_profile(p_name)
+                if template_spec and template_raw_xml:
+                    p_renderer = BpmnTemplateRenderer(
+                        template_raw_xml=template_raw_xml,
+                        spec=template_spec,
+                        ir=repaired_ir,
+                        layout=layout,
+                        profile_config=p_cfg
+                    )
+                    bpmn_by_profile[p_name] = p_renderer.render()
+                else:
+                    p_serializer = BpmnXmlSerializer(repaired_ir, layout, p_cfg)
+                    bpmn_by_profile[p_name] = p_serializer.serialize()
+            except Exception as e:
+                # Fallback to base BPMN XML if custom profile render encounters issue
+                bpmn_by_profile[p_name] = bpmn_xml
+
+    bulk_export = {
+        "process_name": repaired_ir.name or Path(filename).stem,
+        "supported_profiles": supported_profiles,
+        "bpmn_by_profile": bpmn_by_profile,
+        "available_formats": [".bpmn", ".svg", ".png"]
+    }
+
     return {
         "success": True,
         "bpmn_xml": bpmn_xml,
@@ -374,6 +413,7 @@ def process_pipeline(
         "validation_issues": issues,
         "lint_result": lint_dict,
         "template_info": template_info,
+        "bulk_export": bulk_export,
         "metadata": {
             "filename": filename,
             "process_name": repaired_ir.name,
@@ -385,6 +425,9 @@ def process_pipeline(
         },
         "normalized_text": doc.normalized_text if doc else ""
     }
+
+
+MAX_UPLOAD_SIZE_BYTES = int(os.environ.get("MAX_UPLOAD_SIZE_BYTES", 20 * 1024 * 1024))
 
 
 @app.post("/api/convert")
@@ -412,6 +455,28 @@ async def convert_document(
         else:
             raise HTTPException(status_code=400, detail="Either a file upload or text body must be provided.")
 
+        # 1. Enforce size limit (default 20 MB)
+        if len(raw_content) > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds maximum upload size limit of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB."
+            )
+
+        # 2. Detect type by extension plus magic bytes
+        ext = Path(fname).suffix.lower()
+        if ext in (".xlsx", ".docx"):
+            if not raw_content.startswith(b"PK"):
+                raise HTTPException(
+                    status_code=415,
+                    detail=f"File extension '{ext}' does not match file contents (expected PK zip signature)."
+                )
+        elif ext == ".pdf":
+            if not raw_content.startswith(b"%PDF"):
+                raise HTTPException(
+                    status_code=415,
+                    detail="File extension '.pdf' does not match file contents (expected %PDF signature)."
+                )
+
         lane_map_dict = None
         if lane_map:
             try:
@@ -432,6 +497,8 @@ async def convert_document(
             lane_map=lane_map_dict
         )
         return result
+    except HTTPException:
+        raise
     except Exception as ex:
         import traceback
         traceback.print_exc()
@@ -478,6 +545,85 @@ def lint_process(req: LintRequest):
         }
     except Exception as ex:
         raise HTTPException(status_code=500, detail=str(ex))
+
+
+@app.post("/api/export/bulk")
+def export_bulk_zip(data: Dict[str, Any]):
+    """Accepts process_name, bpmn_by_profile, svg, png and generates a downloadable ZIP bundle."""
+    try:
+        import io
+        import zipfile
+        from fastapi.responses import Response
+
+        process_name = data.get("process_name", "process")
+        safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', process_name).lower()
+        bpmn_by_profile = data.get("bpmn_by_profile", {})
+        svg_content = data.get("svg")
+        png_base64 = data.get("png_base64")
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            # Write BPMN for each profile
+            for prof, xml_str in bpmn_by_profile.items():
+                zf.writestr(f"{safe_name}_{prof}.bpmn", xml_str)
+
+            # Write SVG if provided
+            if svg_content:
+                zf.writestr(f"{safe_name}.svg", svg_content)
+
+            # Write PNG if provided
+            if png_base64:
+                import base64
+                if "," in png_base64:
+                    png_base64 = png_base64.split(",", 1)[1]
+                png_bytes = base64.b64decode(png_base64)
+                zf.writestr(f"{safe_name}.png", png_bytes)
+
+            # Write README manifest
+            readme = f"""Text2BPMN Complete Process Package
+===================================
+Process Name: {process_name}
+Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
+
+Files Included:
+"""
+            for prof in bpmn_by_profile.keys():
+                readme += f"- {safe_name}_{prof}.bpmn : BPMN 2.0 XML ({prof.capitalize()} profile)\n"
+            if svg_content:
+                readme += f"- {safe_name}.svg : Scalable Vector Graphics diagram\n"
+            if png_base64:
+                readme += f"- {safe_name}.png : High-resolution raster diagram\n"
+
+            zf.writestr("README.txt", readme)
+
+        zip_buffer.seek(0)
+        return Response(
+            content=zip_buffer.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}_all_formats.zip"'}
+        )
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=str(ex))
+
+
+# Serve built frontend from dist/ at / (StaticFiles with SPA fallback to index.html)
+dist_dir = _PROJECT_ROOT / "dist"
+if dist_dir.exists():
+    assets_dir = dist_dir / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        target_file = dist_dir / full_path
+        if full_path and target_file.is_file():
+            return FileResponse(target_file)
+        index_file = dist_dir / "index.html"
+        if index_file.is_file():
+            return FileResponse(index_file)
+        raise HTTPException(status_code=404, detail="Not Found")
 
 
 if __name__ == "__main__":

@@ -124,6 +124,13 @@ export interface TemplateValidationReport {
   errors: string[];
 }
 
+export interface BulkExportData {
+  process_name: string;
+  supported_profiles: string[];
+  bpmn_by_profile: Record<string, string>;
+  available_formats: string[];
+}
+
 export interface ConversionResponse {
   success: boolean;
   bpmn_xml: string;
@@ -136,6 +143,7 @@ export interface ConversionResponse {
     source_vendor: string;
     lane_map: Record<string, string>;
   };
+  bulk_export?: BulkExportData;
   metadata: {
     filename: string;
     process_name: string;
