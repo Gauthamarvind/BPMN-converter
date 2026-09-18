@@ -11,7 +11,7 @@ import {
   Info,
   ExternalLink,
 } from 'lucide-react';
-import { FlowNode, ValidationIssue, LintResult, ProcessIR } from '../../types';
+import { FlowNode, ValidationIssue, LintResult, ProcessIR, RowValidationErrorItem } from '../../types';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -29,6 +29,8 @@ export interface InspectorProps {
   onSelectElementById?: (id: string) => void;
   isBottomSheet?: boolean;
   exportBlocked?: boolean;
+  rowErrors?: RowValidationErrorItem[];
+  onApplyRowFix?: (fixItem: RowValidationErrorItem) => void;
 }
 
 export const Inspector: React.FC<InspectorProps> = ({
@@ -44,6 +46,8 @@ export const Inspector: React.FC<InspectorProps> = ({
   onSelectElementById,
   isBottomSheet = false,
   exportBlocked = false,
+  rowErrors = [],
+  onApplyRowFix,
 }) => {
   const highlightRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +62,9 @@ export const Inspector: React.FC<InspectorProps> = ({
 
   const totalIssuesCount =
     validationIssues.length +
+    rowErrors.length +
+    (lintResult?.warnings?.length || 0) +
+    (processIr?.open_questions?.length || 0);
     (lintResult?.warnings?.length || 0) +
     (processIr?.open_questions?.length || 0);
 
@@ -266,6 +273,55 @@ export const Inspector: React.FC<InspectorProps> = ({
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Row-Level Template Validation Errors */}
+              {rowErrors.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[12px] font-semibold text-[var(--text-secondary-color)] uppercase tracking-wider">
+                    Template Row Issues ({rowErrors.length})
+                  </span>
+                  {rowErrors.map((err, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-[var(--surface-subtle)] rounded-[8px] space-y-2 border-l-2 border-[var(--danger)]"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Badge
+                            variant={
+                              err.severity === 'ERROR'
+                                ? 'danger'
+                                : err.severity === 'WARNING'
+                                ? 'neutral'
+                                : 'accent'
+                            }
+                            size="sm"
+                          >
+                            Row {err.row}
+                          </Badge>
+                          <span className="text-xs font-mono text-[var(--text-secondary-color)]">
+                            {err.column}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-[13px] text-[var(--text)] leading-snug">
+                        {err.message}
+                      </p>
+                      {err.fix && onApplyRowFix && (
+                        <div className="pt-1">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => onApplyRowFix(err)}
+                          >
+                            {err.fix}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Validation & Lint Findings */}
               {validationIssues.length > 0 && (
                 <div className="space-y-2">

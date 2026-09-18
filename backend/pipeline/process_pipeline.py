@@ -26,6 +26,12 @@ from backend.pipeline.linter import ProfileLinter
 from backend.cli import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
 from backend.templates.doc_parser import DocTemplateParser
+from backend.templates.simple_parser import (
+    SimpleTemplateParser,
+    detect_template_kind,
+    TEMPLATE_KIND_SIMPLE,
+    TEMPLATE_KIND_LEGACY,
+)
 from backend.templates.mapper import LaneMapper
 from backend.templates.bpmn_renderer import BpmnTemplateRenderer
 
@@ -72,19 +78,28 @@ def process_pipeline(
     ext = Path(filename).suffix.lower()
     logger.info(f"[ProcessPipeline] Starting conversion for '{filename}' (profile={profile_name}, mock={mock})")
 
-    # 1. Pipeline Hook: Check if file is a structured document template
+    # 1. Pipeline Hook: Check if file is a structured document template via signature detection
     ir: Optional[ProcessIR] = None
     extraction_meta = {"mode": "llm", "tokens_used": 0}
 
-    if ext in (".xlsx", ".csv", ".docx", ".json"):
+    template_kind = detect_template_kind(raw_content, filename)
+    if template_kind == TEMPLATE_KIND_SIMPLE:
+        simple_parser = SimpleTemplateParser()
+        ir = simple_parser.parse_bytes(raw_content, filename)
+        extraction_meta["mode"] = "simple_template_parser"
+        logger.info(f"[ProcessPipeline] SimpleTemplateParser extracted {len(ir.elements)} elements from '{filename}'")
+    elif template_kind == TEMPLATE_KIND_LEGACY:
         try:
             doc_parser = DocTemplateParser()
             ir = doc_parser.parse_bytes(raw_content, filename)
             extraction_meta["mode"] = "doc_template_parser"
-            logger.info(f"[ProcessPipeline] Document template parser extracted {len(ir.elements)} elements from '{filename}'")
+            logger.info(f"[ProcessPipeline] Legacy DocTemplateParser extracted {len(ir.elements)} elements from '{filename}'")
         except Exception as doc_ex:
-            logger.debug(f"[ProcessPipeline] File is not a structured template ({doc_ex}); proceeding to standard text ingestion.")
+            logger.debug(f"[ProcessPipeline] Legacy template parser error ({doc_ex}); proceeding to standard text ingestion.")
             ir = None
+    else:
+        # Not a template: standard document / SOP text ingestion
+        ir = None
 
     # 2. Ingestion & Process Extraction (LLM or Rule-based Mock)
     doc = None

@@ -20,7 +20,9 @@ import { EmptyState } from './components/layout/EmptyState';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { TemplateManagerSheet } from './components/sheets/TemplateManagerSheet';
 import { LaneMappingSheet } from './components/sheets/LaneMappingSheet';
+import { StepBuilderSheet } from './components/sheets/StepBuilderSheet';
 import { Toast, ToastMessage } from './components/ui/Toast';
+import { RowValidationErrorItem } from './types';
 
 export default function App() {
   const viewerRef = useRef<BpmnViewerHandle>(null);
@@ -43,6 +45,7 @@ export default function App() {
   const [laneMap, setLaneMap] = useState<Record<string, string>>({});
   const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState<boolean>(false);
   const [isLaneMappingOpen, setIsLaneMappingOpen] = useState<boolean>(false);
+  const [isStepBuilderOpen, setIsStepBuilderOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Layout View States
@@ -71,6 +74,7 @@ export default function App() {
   const [selectedElementId, setSelectedElementId] = useState<string | undefined>(undefined);
   const [lintResult, setLintResult] = useState<LintResult | undefined>(undefined);
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
+  const [rowErrors, setRowErrors] = useState<RowValidationErrorItem[]>([]);
   const [conversionMeta, setConversionMeta] = useState<any>(null);
   const [bulkExport, setBulkExport] = useState<BulkExportData | undefined>(undefined);
 
@@ -388,6 +392,7 @@ export default function App() {
         onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
         onOpenLaneMapping={() => setIsLaneMappingOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenStepBuilder={() => setIsStepBuilderOpen(true)}
         hasDiagram={Boolean(bpmnXml)}
         exportBlocked={exportBlocked}
         onExportBpmn={() => viewerRef.current?.exportBpmn()}
@@ -468,6 +473,7 @@ export default function App() {
           selectedElement={selectedNode}
           processIr={processIr}
           validationIssues={validationIssues}
+          rowErrors={rowErrors}
           lintResult={lintResult}
           exportBlocked={exportBlocked}
           sourceText={normalizedText || inputText}
@@ -485,6 +491,12 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onSave={setSettings}
+      />
+
+      <StepBuilderSheet
+        isOpen={isStepBuilderOpen}
+        onClose={() => setIsStepBuilderOpen(false)}
+        onConvertToDiagram={handleFileUpload}
       />
 
       <TemplateManagerSheet

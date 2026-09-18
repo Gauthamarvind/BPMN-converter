@@ -53,7 +53,8 @@ from backend.templates.doc_parser import DocTemplateParser
 from backend.templates.mapper import LaneMapper
 from backend.templates.bpmn_renderer import BpmnTemplateRenderer
 from backend.templates.bpmn_parser import BpmnTemplateParser
-from backend.templates.blank_generator import generate_blank_xlsx, generate_blank_docx
+from backend.templates.blank_generator import generate_blank_xlsx, generate_blank_docx, build_xlsx_from_steps
+from backend.templates.simple_parser import RowValidationError, RowIssue
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,28 @@ async def llm_gateway_error_handler(request: Request, exc: LLMError):
     )
 
 
+@app.exception_handler(RowValidationError)
+async def row_validation_error_handler(request: Request, exc: RowValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Validation failed on template rows",
+            "kind": "RowValidationError",
+            "message": str(exc),
+            "row_errors": [
+                {
+                    "row": issue.row,
+                    "column": issue.column,
+                    "message": issue.message,
+                    "severity": issue.severity,
+                    "fix": issue.fix
+                }
+                for issue in exc.issues
+            ]
+        }
+    )
+
+
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
     if isinstance(exc, (LLMConnectionError, LLMResponseError, LLMRateLimitError, LLMValidationError)):
@@ -192,6 +215,12 @@ class ConvertTextRequest(BaseModel):
 class MapLanesRequest(BaseModel):
     template_id: str
     actors: List[str]
+
+
+class BuildTemplateRequest(BaseModel):
+    process_name: Optional[str] = "Custom Process"
+    steps: List[Dict[str, Any]] = []
+    roles: Optional[List[str]] = None
 
 
 class LintRequest(BaseModel):
@@ -326,16 +355,16 @@ def map_actors_to_lanes(req: MapLanesRequest):
     return mapping_result.model_dump()
 
 
-@app.get("/api/templates/download-blank/{format_type}")
-def download_blank_template(format_type: str):
-    """Downloads a pre-formatted Excel or Word template for structured capture."""
-    fmt = format_type.lower()
+@app.get("/api/templates/download-blank")
+def download_blank_template_query(type: str = "xlsx", sample: bool = True):
+    """Downloads a pre-formatted Excel or Word template for structured capture with query params."""
+    fmt = type.lower()
     if fmt == "xlsx":
-        file_bytes = generate_blank_xlsx()
+        file_bytes = generate_blank_xlsx(include_sample=sample)
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         filename = "Process_Capture_Template.xlsx"
     elif fmt == "docx":
-        file_bytes = generate_blank_docx()
+        file_bytes = generate_blank_docx(include_sample=sample)
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         filename = "Process_Capture_Template.docx"
     else:
@@ -346,6 +375,29 @@ def download_blank_template(format_type: str):
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+@app.get("/api/templates/download-blank/{format_type}")
+def download_blank_template(format_type: str, sample: bool = True):
+    """Downloads a pre-formatted Excel or Word template for structured capture (path param)."""
+    return download_blank_template_query(type=format_type, sample=sample)
+
+
+@app.post("/api/templates/build")
+def build_template_xlsx(req: BuildTemplateRequest):
+    """Builds and returns a formatted Excel workbook from Step Builder JSON."""
+    file_bytes = build_xlsx_from_steps(
+        process_name=req.process_name or "Custom Process",
+        steps=req.steps,
+        roles=req.roles
+    )
+    filename = f"{re.sub(r'[^a-zA-Z0-9_-]', '_', req.process_name or 'Process')}.xlsx"
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
 
 
 MAX_UPLOAD_SIZE_BYTES = int(os.environ.get("MAX_UPLOAD_SIZE_BYTES", 20 * 1024 * 1024))

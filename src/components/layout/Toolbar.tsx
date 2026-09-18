@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings as SettingsIcon, Layers, Download, Check, GitMerge, ChevronDown } from 'lucide-react';
+import { Settings as SettingsIcon, Layers, Download, Check, GitMerge, ChevronDown, Table, FileSpreadsheet } from 'lucide-react';
 import { ProfileMetadata, TemplateRecord } from '../../types';
 import { Button } from '../ui/Button';
 import { SegmentedControl, SegmentedOption } from '../ui/SegmentedControl';
@@ -16,6 +16,7 @@ export interface ToolbarProps {
   onOpenTemplateManager: () => void;
   onOpenLaneMapping: () => void;
   onOpenSettings: () => void;
+  onOpenStepBuilder?: () => void;
   onExportBpmn: () => void;
   onExportSvg: () => void;
   onExportPng: () => void;
@@ -36,6 +37,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onOpenTemplateManager,
   onOpenLaneMapping,
   onOpenSettings,
+  onOpenStepBuilder,
   onExportBpmn,
   onExportSvg,
   onExportPng,
@@ -141,6 +143,30 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
             <div className="h-px bg-[var(--separator)] my-1" />
 
+            <div className="px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary-color)]">
+              Process Capture Workbooks
+            </div>
+            <a
+              href="/api/templates/download-blank?type=xlsx&sample=true"
+              download="Process_Capture_Template.xlsx"
+              onClick={() => setIsTemplateMenuOpen(false)}
+              className="w-full px-2.5 py-1.5 rounded-[8px] text-[13px] text-[var(--text)] hover:bg-[var(--surface-subtle)] flex items-center gap-2 cursor-pointer no-underline"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-[var(--success)]" />
+              <span>Download Excel Template</span>
+            </a>
+            <a
+              href="/api/templates/download-blank?type=docx&sample=true"
+              download="Process_Capture_Template.docx"
+              onClick={() => setIsTemplateMenuOpen(false)}
+              className="w-full px-2.5 py-1.5 rounded-[8px] text-[13px] text-[var(--text)] hover:bg-[var(--surface-subtle)] flex items-center gap-2 cursor-pointer no-underline"
+            >
+              <Table className="w-3.5 h-3.5 text-[var(--accent)]" />
+              <span>Download Word Template</span>
+            </a>
+
+            <div className="h-px bg-[var(--separator)] my-1" />
+
             {activeTemplate && (
               <button
                 onClick={() => {
@@ -166,6 +192,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </button>
           </div>
         </Popover>
+
+        {/* Step Builder (No-Code Process Capture) */}
+        {onOpenStepBuilder && (
+          <Button
+            id="step-builder-open-btn"
+            variant="ghost"
+            size="md"
+            icon={<Table className="w-4 h-4 text-[var(--text-secondary-color)]" />}
+            onClick={onOpenStepBuilder}
+          >
+            Step Builder
+          </Button>
+        )}
 
         {/* Primary Export Action */}
         <Popover

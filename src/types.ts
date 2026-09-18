@@ -161,6 +161,30 @@ export interface ConversionResponse {
   error?: string;
 }
 
+export interface StepBuilderRow {
+  step_id: string;
+  step: string;
+  responsible: string;
+  type: 'Task' | 'Decision' | 'End';
+  if_yes?: string;
+  if_no?: string;
+  parallel_group?: string;
+  next_step?: string;
+  description?: string;
+  system?: string;
+  input_data?: string;
+  output_data?: string;
+  duration?: string;
+}
+
+export interface RowValidationErrorItem {
+  row: number;
+  column: string;
+  message: string;
+  severity: 'ERROR' | 'WARNING' | 'INFO';
+  fix?: string;
+}
+
 export interface LLMSettings {
   provider: 'openai_compatible' | 'anthropic' | 'gemini' | 'mock';
   model: string;
