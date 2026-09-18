@@ -48,7 +48,7 @@ from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import BpmnSchemaError, BpmnSchemaConfigurationError
 from backend.pipeline.linter import ProfileLinter
 from backend.pipeline.process_pipeline import process_pipeline
-from backend.cli import generate_mock_ir_from_text
+from backend.pipeline.mock_extractor import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
 from backend.templates.doc_parser import DocTemplateParser
 from backend.templates.mapper import LaneMapper

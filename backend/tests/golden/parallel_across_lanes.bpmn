@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Process_Parallel_Across_Lanes" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Process2BPMN" exporterVersion="1.0.0">
+  <bpmn:collaboration id="Collaboration_Process_Parallel_Across_Lanes">
+    <bpmn:participant id="Pool_Parallel_Across_Lanes" name="Parallel Across Lanes" processRef="Process_Parallel_Across_Lanes"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Parallel_Across_Lanes" name="Parallel Across Lanes" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Parallel_Across_Lanes">
+      <bpmn:lane id="Lane_PM" name="PM">
+        <bpmn:flowNodeRef>StartEvent_Parallel_Across_Lanes</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_4</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_4_auto</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Engineering" name="Engineering">
+        <bpmn:flowNodeRef>ParallelSplit_G1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_2</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Marketing" name="Marketing">
+        <bpmn:flowNodeRef>ParallelJoin_G1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_3</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="StartEvent_Parallel_Across_Lanes" name="Start">
+      <bpmn:outgoing>Flow_start_to_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:parallelGateway id="ParallelSplit_G1" name="Split G1">
+      <bpmn:incoming>Flow_1_to_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_split_G1_to_2</bpmn:outgoing>
+      <bpmn:outgoing>Flow_split_G1_to_3</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:parallelGateway id="ParallelJoin_G1" name="Join G1">
+      <bpmn:incoming>Flow_2_to_join_G1</bpmn:incoming>
+      <bpmn:incoming>Flow_3_to_join_G1</bpmn:incoming>
+      <bpmn:outgoing>Flow_join_G1_to_4</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Task_1" name="Kick off">
+      <bpmn:incoming>Flow_start_to_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_1_to_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_2" name="Build backend">
+      <bpmn:incoming>Flow_split_G1_to_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_2_to_join_G1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_3" name="Prepare launch">
+      <bpmn:incoming>Flow_split_G1_to_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_3_to_join_G1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_4" name="Release">
+      <bpmn:incoming>Flow_join_G1_to_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_4_to_EndEvent_4_auto</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="EndEvent_4_auto" name="End">
+      <bpmn:incoming>Flow_4_to_EndEvent_4_auto</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_split_G1_to_2" sourceRef="ParallelSplit_G1" targetRef="Task_2"/>
+    <bpmn:sequenceFlow id="Flow_2_to_join_G1" sourceRef="Task_2" targetRef="ParallelJoin_G1"/>
+    <bpmn:sequenceFlow id="Flow_split_G1_to_3" sourceRef="ParallelSplit_G1" targetRef="Task_3"/>
+    <bpmn:sequenceFlow id="Flow_3_to_join_G1" sourceRef="Task_3" targetRef="ParallelJoin_G1"/>
+    <bpmn:sequenceFlow id="Flow_start_to_1" sourceRef="StartEvent_Parallel_Across_Lanes" targetRef="Task_1"/>
+    <bpmn:sequenceFlow id="Flow_1_to_2" sourceRef="Task_1" targetRef="ParallelSplit_G1"/>
+    <bpmn:sequenceFlow id="Flow_join_G1_to_4" sourceRef="ParallelJoin_G1" targetRef="Task_4"/>
+    <bpmn:sequenceFlow id="Flow_4_to_EndEvent_4_auto" sourceRef="Task_4" targetRef="EndEvent_4_auto"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_Parallel_Across_Lanes">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_Parallel_Across_Lanes" bpmnElement="Collaboration_Process_Parallel_Across_Lanes">
+      <bpmndi:BPMNShape id="BPMNShape_Pool_Parallel_Across_Lanes" bpmnElement="Pool_Parallel_Across_Lanes" isHorizontal="true">
+        <dc:Bounds x="140.0" y="80.0" width="1640.0" height="540.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_PM" bpmnElement="Lane_PM" isHorizontal="true">
+        <dc:Bounds x="170.0" y="80.0" width="1610.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_Engineering" bpmnElement="Lane_Engineering" isHorizontal="true">
+        <dc:Bounds x="170.0" y="260.0" width="1610.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_Marketing" bpmnElement="Lane_Marketing" isHorizontal="true">
+        <dc:Bounds x="170.0" y="440.0" width="1610.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_StartEvent_Parallel_Across_Lanes" bpmnElement="StartEvent_Parallel_Across_Lanes">
+        <dc:Bounds x="220.0" y="152.0" width="36.0" height="36.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="195.0" y="194.0" width="86.0" height="24.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ParallelSplit_G1" bpmnElement="ParallelSplit_G1">
+        <dc:Bounds x="580.0" y="325.0" width="50.0" height="50.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="560.0" y="301.0" width="90.0" height="20.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_ParallelJoin_G1" bpmnElement="ParallelJoin_G1">
+        <dc:Bounds x="940.0" y="505.0" width="50.0" height="50.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="920.0" y="481.0" width="90.0" height="20.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Task_1" bpmnElement="Task_1">
+        <dc:Bounds x="400.0" y="130.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Task_2" bpmnElement="Task_2">
+        <dc:Bounds x="760.0" y="310.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Task_3" bpmnElement="Task_3">
+        <dc:Bounds x="760.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Task_4" bpmnElement="Task_4">
+        <dc:Bounds x="1120.0" y="130.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_EndEvent_4_auto" bpmnElement="EndEvent_4_auto">
+        <dc:Bounds x="1300.0" y="152.0" width="36.0" height="36.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1275.0" y="194.0" width="86.0" height="24.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_split_G1_to_2" bpmnElement="Flow_split_G1_to_2">
+        <di:waypoint x="630.0" y="350.0"/>
+        <di:waypoint x="760.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_2_to_join_G1" bpmnElement="Flow_2_to_join_G1">
+        <di:waypoint x="860.0" y="350.0"/>
+        <di:waypoint x="900.0" y="350.0"/>
+        <di:waypoint x="900.0" y="530.0"/>
+        <di:waypoint x="940.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_split_G1_to_3" bpmnElement="Flow_split_G1_to_3">
+        <di:waypoint x="630.0" y="350.0"/>
+        <di:waypoint x="695.0" y="350.0"/>
+        <di:waypoint x="695.0" y="530.0"/>
+        <di:waypoint x="760.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_3_to_join_G1" bpmnElement="Flow_3_to_join_G1">
+        <di:waypoint x="860.0" y="530.0"/>
+        <di:waypoint x="940.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_start_to_1" bpmnElement="Flow_start_to_1">
+        <di:waypoint x="256.0" y="170.0"/>
+        <di:waypoint x="400.0" y="170.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_1_to_2" bpmnElement="Flow_1_to_2">
+        <di:waypoint x="500.0" y="170.0"/>
+        <di:waypoint x="540.0" y="170.0"/>
+        <di:waypoint x="540.0" y="350.0"/>
+        <di:waypoint x="580.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_join_G1_to_4" bpmnElement="Flow_join_G1_to_4">
+        <di:waypoint x="990.0" y="530.0"/>
+        <di:waypoint x="1055.0" y="530.0"/>
+        <di:waypoint x="1055.0" y="170.0"/>
+        <di:waypoint x="1120.0" y="170.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_4_to_EndEvent_4_auto" bpmnElement="Flow_4_to_EndEvent_4_auto">
+        <di:waypoint x="1220.0" y="170.0"/>
+        <di:waypoint x="1300.0" y="170.0"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

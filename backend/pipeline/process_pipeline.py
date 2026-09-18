@@ -23,7 +23,7 @@ from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import validate_bpmn, BpmnSchemaError
 from backend.pipeline.linter import ProfileLinter
-from backend.cli import generate_mock_ir_from_text
+from backend.pipeline.mock_extractor import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
 from backend.templates.doc_parser import DocTemplateParser
 from backend.templates.simple_parser import (

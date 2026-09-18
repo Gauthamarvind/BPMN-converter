@@ -329,9 +329,13 @@ class ProcessValidator:
             if f.sourceId in outgoing_counts:
                 outgoing_counts[f.sourceId] += 1
 
+        # Only nodes reachable from a start event are auto-connected to the end event.
+        # An isolated node is reported as an ERROR by _check_reachability; inventing a flow
+        # for it would hide the problem behind a fabricated edge.
+        reachable = self._reachable_ids()
         terminal_nodes = [
             e.id for e in self.ir.elements
-            if outgoing_counts[e.id] == 0 and e.type != "endEvent"
+            if outgoing_counts[e.id] == 0 and e.type != "endEvent" and e.id in reachable
         ]
 
         if not end_events:
@@ -392,29 +396,32 @@ class ProcessValidator:
                             question=f"Gateway '{elem.name or elem.id}' ({elem.id}) has unlabeled outgoing branches. What condition triggers each branch?"
                         ))
 
-    def _check_reachability(self) -> None:
-        """Flags nodes that cannot be reached from any startEvent as ERROR without auto-bridging."""
+    def _reachable_ids(self) -> Set[str]:
+        """Returns the ids of every element reachable from a start event (all ids if there is none)."""
         start_ids = [e.id for e in self.ir.elements if e.type == "startEvent"]
         if not start_ids:
-            return
+            return {e.id for e in self.ir.elements}
 
         adjacency: Dict[str, List[str]] = {e.id: [] for e in self.ir.elements}
         for f in self.ir.flows:
             if f.sourceId in adjacency:
                 adjacency[f.sourceId].append(f.targetId)
 
-        visited: Set[str] = set()
+        visited: Set[str] = set(start_ids)
         queue = list(start_ids)
-        for s in start_ids:
-            visited.add(s)
-
         while queue:
             curr = queue.pop(0)
             for neighbor in adjacency.get(curr, []):
                 if neighbor not in visited:
                     visited.add(neighbor)
                     queue.append(neighbor)
+        return visited
 
+    def _check_reachability(self) -> None:
+        """Flags nodes that cannot be reached from any startEvent as ERROR without auto-bridging."""
+        if not any(e.type == "startEvent" for e in self.ir.elements):
+            return
+        visited = self._reachable_ids()
         unreachable = [e for e in self.ir.elements if e.id not in visited]
         for u in unreachable:
             self.export_blocked = True

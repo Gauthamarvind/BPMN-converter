@@ -48,6 +48,12 @@ class RowIssue:
     fix: Optional[str] = None
 
 
+def _source_ref(doc_id: str, sheet_name: str, row_number: int, text: str) -> SourceRef:
+    """Builds a SourceRef in the IR's field layout: '<file>!<sheet>:row <n>' plus the row text."""
+    location = f"{doc_id}!{sheet_name}:row {row_number}" if doc_id else f"{sheet_name}:row {row_number}"
+    return SourceRef(sourceLocation=location, textSnippet=(text or "")[:200])
+
+
 class RowValidationError(ValueError):
     """Raised when one or more row validation errors prevent conversion."""
     def __init__(self, issues: List[RowIssue]):
@@ -79,6 +85,18 @@ def normalize_str(val: Any) -> str:
     if val is None:
         return ""
     return str(val).strip()
+
+
+def _looks_like_legacy_header(cells: List[str]) -> bool:
+    """
+    A step table with a step column, an actor/role column and an activity or next-step column
+    (e.g. "Step ID | Actor / Role | Activity Name | Next Step") is a legacy step list.
+    """
+    norm = [re.sub(r"[^a-z0-9]+", " ", c).strip() for c in cells]
+    has_step = any(c in ("step", "step id", "id", "no", "index") or c.startswith("step ") for c in norm)
+    has_actor = any(any(tok in c.split() for tok in ("actor", "role", "lane", "department", "performer", "owner")) for c in norm)
+    has_activity = any(any(tok in c.split() for tok in ("activity", "task", "action")) or c.startswith("next") for c in norm)
+    return has_step and has_actor and has_activity
 
 
 def detect_template_kind(raw_content: bytes, filename: str) -> str:
@@ -126,6 +144,9 @@ def detect_template_kind(raw_content: bytes, filename: str) -> str:
                 if "step #" in joined or ("activity" in row_str_cells and "role" in row_str_cells and "task type" in row_str_cells):
                     wb.close()
                     return TEMPLATE_KIND_LEGACY
+                if _looks_like_legacy_header(row_str_cells):
+                    wb.close()
+                    return TEMPLATE_KIND_LEGACY
             wb.close()
         except Exception:
             pass
@@ -167,6 +188,8 @@ def detect_template_kind(raw_content: bytes, filename: str) -> str:
                 if "step" in row_str_cells and ("task" in row_str_cells or "actor" in row_str_cells or "next steps" in row_str_cells or "type" in row_str_cells):
                     return TEMPLATE_KIND_LEGACY
                 if "step #" in joined or ("activity" in row_str_cells and "role" in row_str_cells) or "task type" in row_str_cells:
+                    return TEMPLATE_KIND_LEGACY
+                if _looks_like_legacy_header(row_str_cells):
                     return TEMPLATE_KIND_LEGACY
         except Exception:
             pass
@@ -712,34 +735,59 @@ class SimpleTemplateParser:
                     message=f"Row {s.row_number}: Step '{s.step}' is unreachable from the process start."
                 ))
 
-        # Loop detection (confirmation / warning)
-        visited_cycles: Set[Tuple[str, str]] = set()
+        # Loop detection (confirmation / warning).
+        # Only genuine back edges are reported: an edge whose target is still on the DFS stack
+        # when the edge is explored. Parallel-group sibling links exist in `adj` purely for
+        # reachability and are excluded here, otherwise every parallel group and every forward
+        # edge that happens to sit on a cycle would be flagged as a loop.
+        sibling_pairs: Set[Tuple[str, str]] = set()
+        for members in parallel_groups.values():
+            member_ids = [m.step_id.strip() for m in members]
+            for a in member_ids:
+                for b in member_ids:
+                    if a != b:
+                        sibling_pairs.add((a, b))
+
+        flow_adj: Dict[str, List[str]] = {}
         for src_id, targets in adj.items():
+            seen_targets: List[str] = []
             for tgt_id in targets:
-                # If tgt_id can reach src_id, there is a cycle/loop
-                sub_visited: Set[str] = set()
-                sub_q = [tgt_id]
-                is_loop = False
-                while sub_q:
-                    curr = sub_q.pop(0)
-                    if curr == src_id:
-                        is_loop = True
-                        break
-                    if curr not in sub_visited:
-                        sub_visited.add(curr)
-                        for nxt in adj.get(curr, []):
-                            if nxt not in sub_visited:
-                                sub_q.append(nxt)
-                if is_loop and (src_id, tgt_id) not in visited_cycles:
-                    visited_cycles.add((src_id, tgt_id))
-                    src_step = step_id_map.get(src_id)
-                    if src_step:
-                        warnings.append(RowIssue(
-                            row=src_step.row_number,
-                            column="Next Step",
-                            message=f"Row {src_step.row_number}: Loop detected from Step '{src_id}' back to Step '{tgt_id}' (allowed; verify exit condition).",
-                            severity="INFO"
-                        ))
+                # skip sibling links, self links (a parallel member defaulting to the next
+                # row, which is its own group) and duplicates
+                if (src_id, tgt_id) in sibling_pairs or tgt_id == src_id or tgt_id in seen_targets:
+                    continue
+                seen_targets.append(tgt_id)
+            flow_adj[src_id] = seen_targets
+
+        back_edges: List[Tuple[str, str]] = []
+        state: Dict[str, int] = {}  # absent = unvisited, 1 = on stack, 2 = done
+
+        def dfs(node: str) -> None:
+            state[node] = 1
+            for nxt in flow_adj.get(node, []):
+                nxt_state = state.get(nxt, 0)
+                if nxt_state == 1:
+                    if (node, nxt) not in back_edges:
+                        back_edges.append((node, nxt))
+                elif nxt_state == 0:
+                    dfs(nxt)
+            state[node] = 2
+
+        if steps:
+            dfs(steps[0].step_id.strip())
+            for s_node in steps:  # cover nodes not reachable from the first step
+                if state.get(s_node.step_id.strip(), 0) == 0:
+                    dfs(s_node.step_id.strip())
+
+        for src_id, tgt_id in back_edges:
+            src_step = step_id_map.get(src_id)
+            if src_step:
+                warnings.append(RowIssue(
+                    row=src_step.row_number,
+                    column="Next Step",
+                    message=f"Row {src_step.row_number}: Loop detected from Step '{src_id}' back to Step '{tgt_id}' (allowed; verify exit condition).",
+                    severity="INFO"
+                ))
 
         is_valid = len(errors) == 0
         return is_valid, errors, warnings
@@ -789,7 +837,7 @@ class SimpleTemplateParser:
             name="Start",
             type="startEvent",
             laneId=first_lane_id,
-            sourceRefs=[SourceRef(sheet=first_step.sheet_name, row=first_step.row_number, text="Process Start", doc_id=doc_id)]
+            sourceRefs=[_source_ref(doc_id, first_step.sheet_name, first_step.row_number, "Process Start")]
         )
         elements.append(start_node)
 
@@ -826,14 +874,14 @@ class SimpleTemplateParser:
                 name=f"Split {pg_key}",
                 type="parallelGateway",
                 laneId=split_lane_id,
-                sourceRefs=[SourceRef(sheet=first_m.sheet_name, row=first_m.row_number, text=f"Parallel Group {pg_key}", doc_id=doc_id)]
+                sourceRefs=[_source_ref(doc_id, first_m.sheet_name, first_m.row_number, f"Parallel Group {pg_key}")]
             )
             join_node = FlowNode(
                 id=join_id,
                 name=f"Join {pg_key}",
                 type="parallelGateway",
                 laneId=join_lane_id,
-                sourceRefs=[SourceRef(sheet=last_m.sheet_name, row=last_m.row_number, text=f"Parallel Group {pg_key}", doc_id=doc_id)]
+                sourceRefs=[_source_ref(doc_id, last_m.sheet_name, last_m.row_number, f"Parallel Group {pg_key}")]
             )
             elements.append(split_node)
             elements.append(join_node)
@@ -848,7 +896,7 @@ class SimpleTemplateParser:
             is_decision = s.type.strip().lower() in ("decision", "gateway", "exclusivegateway")
             is_end = s.type.strip().lower() in ("end", "endevent")
 
-            source_ref = SourceRef(sheet=s.sheet_name, row=s.row_number, text=s.step, doc_id=doc_id)
+            source_ref = _source_ref(doc_id, s.sheet_name, s.row_number, s.step)
 
             if is_decision:
                 gw_id = sanitize_ncname(f"Gateway_{s_id}", f"Gateway_{idx + 1}")
@@ -989,7 +1037,7 @@ class SimpleTemplateParser:
                             name="End",
                             type="endEvent",
                             laneId=role_to_lane_id.get(s.responsible.strip() or "Unassigned", lanes[0].id),
-                            sourceRefs=[SourceRef(sheet=s.sheet_name, row=s.row_number, text="Parallel Group End", doc_id=doc_id)]
+                            sourceRefs=[_source_ref(doc_id, s.sheet_name, s.row_number, "Parallel Group End")]
                         ))
                         flows.append(SequenceFlow(
                             id=sanitize_ncname(f"Flow_join_{pg_key}_to_end", f"Flow_join_{pg_key}_end"),
@@ -1025,7 +1073,7 @@ class SimpleTemplateParser:
                                 name="End",
                                 type="endEvent",
                                 laneId=role_to_lane_id.get(s.responsible.strip() or "Unassigned", lanes[0].id),
-                                sourceRefs=[SourceRef(sheet=s.sheet_name, row=s.row_number, text="Parallel Group End", doc_id=doc_id)]
+                                sourceRefs=[_source_ref(doc_id, s.sheet_name, s.row_number, "Parallel Group End")]
                             ))
                             flows.append(SequenceFlow(
                                 id=sanitize_ncname(f"Flow_join_{pg_key}_to_end", f"Flow_join_{pg_key}_end"),
@@ -1045,7 +1093,7 @@ class SimpleTemplateParser:
                         name="End",
                         type="endEvent",
                         laneId=lane_id,
-                        sourceRefs=[SourceRef(sheet=s.sheet_name, row=s.row_number, text=f"Step {s_id} End", doc_id=doc_id)]
+                        sourceRefs=[_source_ref(doc_id, s.sheet_name, s.row_number, f"Step {s_id} End")]
                     ))
                     flows.append(SequenceFlow(
                         id=sanitize_ncname(f"Flow_{s_id}_to_{end_node_id}", f"Flow_{s_id}_end"),
@@ -1077,7 +1125,7 @@ class SimpleTemplateParser:
                         name="End",
                         type="endEvent",
                         laneId=lane_id,
-                        sourceRefs=[SourceRef(sheet=s.sheet_name, row=s.row_number, text="Process End", doc_id=doc_id)]
+                        sourceRefs=[_source_ref(doc_id, s.sheet_name, s.row_number, "Process End")]
                     ))
                     flows.append(SequenceFlow(
                         id=sanitize_ncname(f"Flow_{s_id}_to_{end_node_id}", f"Flow_{s_id}_end"),

@@ -6,6 +6,7 @@ Enforces security: macro-free openpyxl execution, file size limits.
 """
 
 from __future__ import annotations
+import re
 import csv
 import json
 import io
@@ -327,14 +328,43 @@ class DocTemplateParser:
         if not rows:
             return ProcessIR(id="Process_1", name=title, description="Empty document template")
 
-        # Map header names to IR fields
+        # Map header names to IR fields. Exact alias matches win; otherwise a header that
+        # contains an alias as a whole word (e.g. "Actor / Role", "Activity Name",
+        # "Condition / Rule") is accepted so real-world spreadsheets map without editing.
         col_header_map: Dict[str, str] = {}  # ir_field -> matching header in row
         sample_row = rows[0]
+        headers = list(sample_row.keys())
+
+        def _norm(text: str) -> str:
+            return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+        used_headers: set = set()
         for ir_field, col_def in self.config.columns.items():
+            exact = None
             for alias in col_def.aliases:
-                for h in sample_row.keys():
-                    if h.lower() == alias.lower():
+                for h in headers:
+                    if h not in used_headers and _norm(h) == _norm(alias):
+                        exact = h
+                        break
+                if exact:
+                    break
+            if exact:
+                col_header_map[ir_field] = exact
+                used_headers.add(exact)
+        for ir_field, col_def in self.config.columns.items():
+            if ir_field in col_header_map:
+                continue
+            for alias in col_def.aliases:
+                alias_n = _norm(alias)
+                if len(alias_n) < 3:
+                    continue
+                for h in headers:
+                    if h in used_headers:
+                        continue
+                    h_n = _norm(h)
+                    if re.search(rf"(^| ){re.escape(alias_n)}( |$)", h_n):
                         col_header_map[ir_field] = h
+                        used_headers.add(h)
                         break
                 if ir_field in col_header_map:
                     break
@@ -343,6 +373,8 @@ class DocTemplateParser:
         flows: List[SequenceFlow] = []
         lanes_dict: Dict[str, str] = {}  # actor_name -> lane_id
         step_id_to_elem_id: Dict[str, str] = {}
+        row_condition: Dict[str, str] = {}  # elem_id -> condition written on that row
+        branch_gateways: List[FlowNode] = []  # gateways synthesised for multi-target rows
 
         # 1. Start Event
         start_event = FlowNode(
@@ -387,6 +419,7 @@ class DocTemplateParser:
             elem_id = f"Activity_{idx}" if elem_type != "exclusiveGateway" else f"Gateway_{idx}"
             step_id_to_elem_id[raw_step_id] = elem_id
             step_id_to_elem_id[str(idx)] = elem_id
+            row_condition[elem_id] = get_val("condition", "")
 
             desc = doc_val
             if system_val:
@@ -444,18 +477,55 @@ class DocTemplateParser:
             condition_val = get_val("condition", "")
 
             if next_steps_raw:
-                targets = [s.strip() for s in next_steps_raw.split(",") if s.strip()]
+                # Accept "A, B", "A; B", "A / B" and "A | B" as multiple targets.
+                targets = [t.strip() for t in re.split(r"[,;/|]", next_steps_raw) if t.strip()]
+                resolved: List[str] = []
                 for t in targets:
                     target_elem_id = step_id_to_elem_id.get(t)
                     if not target_elem_id and t.lower() in ("end", "finish", "done"):
                         target_elem_id = "Event_end"
                     if target_elem_id:
+                        resolved.append(target_elem_id)
+
+                source_elem = elements[idx]
+                if len(resolved) > 1 and source_elem.type != "exclusiveGateway":
+                    # A task with several successors is a decision: insert a gateway after it
+                    # and label each branch with the condition written on the target row.
+                    gw_id = f"Gateway_{curr_elem_id}"
+                    branch_gateways.append(
+                        FlowNode(
+                            id=gw_id,
+                            type="exclusiveGateway",
+                            name=f"{source_elem.name}?",
+                            laneId=source_elem.laneId,
+                            confidence=1.0,
+                            sourceRefs=list(source_elem.sourceRefs),
+                        )
+                    )
+                    flows.append(SequenceFlow(id=f"Flow_{curr_elem_id}_{gw_id}", sourceId=curr_elem_id, targetId=gw_id))
+                    for target_elem_id in resolved:
+                        label = row_condition.get(target_elem_id, "") or condition_val
+                        flows.append(
+                            SequenceFlow(
+                                id=f"Flow_{gw_id}_{target_elem_id}",
+                                sourceId=gw_id,
+                                targetId=target_elem_id,
+                                name=label,
+                                condition=label,
+                            )
+                        )
+                else:
+                    for target_elem_id in resolved:
+                        label = condition_val
+                        if source_elem.type == "exclusiveGateway" and not label:
+                            label = row_condition.get(target_elem_id, "")
                         flows.append(
                             SequenceFlow(
                                 id=f"Flow_{curr_elem_id}_{target_elem_id}",
                                 sourceId=curr_elem_id,
                                 targetId=target_elem_id,
-                                condition=condition_val
+                                name=label if source_elem.type == "exclusiveGateway" else "",
+                                condition=label,
                             )
                         )
             elif idx < len(rows):
@@ -488,6 +558,8 @@ class DocTemplateParser:
                 lanes=lanes
             )
         ]
+
+        elements.extend(branch_gateways)
 
         return ProcessIR(
             id="Process_1",

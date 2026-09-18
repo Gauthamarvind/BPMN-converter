@@ -35,7 +35,13 @@ def get_llm_provider(
         from backend.llm.adapters.anthropic import AnthropicAdapter
         return AnthropicAdapter(base_url=url, api_key=key, model=mdl)
     elif prov in ("gemini", "google"):
-        from backend.llm.adapters.gemini import GeminiAdapter
+        try:
+            from backend.llm.adapters.gemini import GeminiAdapter
+        except ImportError as ex:
+            raise LLMConfigurationError(
+                "LLM_PROVIDER=gemini but the optional adapter backend/llm/adapters/gemini.py is not "
+                "installed. Restore the file or choose another provider."
+            ) from ex
         return GeminiAdapter(base_url=url, api_key=key, model=mdl)
     elif prov == "mock":
         from backend.llm.adapters.mock import MockAdapter

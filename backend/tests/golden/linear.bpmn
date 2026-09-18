@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Process_Linear_Process" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Process2BPMN" exporterVersion="1.0.0">
+  <bpmn:collaboration id="Collaboration_Process_Linear_Process">
+    <bpmn:participant id="Pool_Linear_Process" name="Linear Process" processRef="Process_Linear_Process"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Linear_Process" name="Linear Process" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_Linear_Process">
+      <bpmn:lane id="Lane_Employee" name="Employee">
+        <bpmn:flowNodeRef>StartEvent_Linear_Process</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_1</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Manager" name="Manager">
+        <bpmn:flowNodeRef>Task_2</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_HR" name="HR">
+        <bpmn:flowNodeRef>Task_3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_3_auto</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="StartEvent_Linear_Process" name="Start">
+      <bpmn:outgoing>Flow_start_to_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_1" name="Receive request">
+      <bpmn:incoming>Flow_start_to_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_1_to_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_2" name="Review request">
+      <bpmn:incoming>Flow_1_to_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_2_to_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_3" name="File request">
+      <bpmn:incoming>Flow_2_to_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_3_to_EndEvent_3_auto</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="EndEvent_3_auto" name="End">
+      <bpmn:incoming>Flow_3_to_EndEvent_3_auto</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_start_to_1" sourceRef="StartEvent_Linear_Process" targetRef="Task_1"/>
+    <bpmn:sequenceFlow id="Flow_1_to_2" sourceRef="Task_1" targetRef="Task_2"/>
+    <bpmn:sequenceFlow id="Flow_2_to_3" sourceRef="Task_2" targetRef="Task_3"/>
+    <bpmn:sequenceFlow id="Flow_3_to_EndEvent_3_auto" sourceRef="Task_3" targetRef="EndEvent_3_auto"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_Linear_Process">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_Linear_Process" bpmnElement="Collaboration_Process_Linear_Process">
+      <bpmndi:BPMNShape id="BPMNShape_Pool_Linear_Process" bpmnElement="Pool_Linear_Process" isHorizontal="true">
+        <dc:Bounds x="140.0" y="80.0" width="1280.0" height="540.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_Employee" bpmnElement="Lane_Employee" isHorizontal="true">
+        <dc:Bounds x="170.0" y="80.0" width="1250.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_Manager" bpmnElement="Lane_Manager" isHorizontal="true">
+        <dc:Bounds x="170.0" y="260.0" width="1250.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_HR" bpmnElement="Lane_HR" isHorizontal="true">
+        <dc:Bounds x="170.0" y="440.0" width="1250.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_StartEvent_Linear_Process" bpmnElement="StartEvent_Linear_Process">
+        <dc:Bounds x="220.0" y="152.0" width="36.0" height="36.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="195.0" y="194.0" width="86.0" height="24.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Task_1" bpmnElement="Task_1">
+        <dc:Bounds x="400.0" y="130.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Task_2" bpmnElement="Task_2">
+        <dc:Bounds x="580.0" y="310.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Task_3" bpmnElement="Task_3">
+        <dc:Bounds x="760.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_EndEvent_3_auto" bpmnElement="EndEvent_3_auto">
+        <dc:Bounds x="940.0" y="512.0" width="36.0" height="36.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="915.0" y="554.0" width="86.0" height="24.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_start_to_1" bpmnElement="Flow_start_to_1">
+        <di:waypoint x="256.0" y="170.0"/>
+        <di:waypoint x="400.0" y="170.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_1_to_2" bpmnElement="Flow_1_to_2">
+        <di:waypoint x="500.0" y="170.0"/>
+        <di:waypoint x="540.0" y="170.0"/>
+        <di:waypoint x="540.0" y="350.0"/>
+        <di:waypoint x="580.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_2_to_3" bpmnElement="Flow_2_to_3">
+        <di:waypoint x="680.0" y="350.0"/>
+        <di:waypoint x="720.0" y="350.0"/>
+        <di:waypoint x="720.0" y="530.0"/>
+        <di:waypoint x="760.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_3_to_EndEvent_3_auto" bpmnElement="Flow_3_to_EndEvent_3_auto">
+        <di:waypoint x="860.0" y="530.0"/>
+        <di:waypoint x="940.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

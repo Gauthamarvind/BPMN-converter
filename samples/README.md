@@ -4,16 +4,22 @@ This directory contains ready-to-convert sample inputs in various formats (.xlsx
 
 ---
 
+## Which mode produces which result
+
+- **Structured inputs** (`sample_leave_request.xlsx`, `sample_sop.docx`, `sample_process_steps.csv`) are converted **deterministically** — no model is called, and the outcome described below is exact in every mode, including mock mode.
+- **Free-text inputs** (`.md`, `.txt`, `.vtt`, `.pdf`) need an LLM (`LLM_PROVIDER` other than `mock`) to reach the outcomes described below. In **mock mode** they still convert, but through a simple rule engine that guesses steps and roles from sentence structure; expect rough names and odd lanes. Mock mode exists to test the pipeline and the importers, not to judge extraction quality.
+
 ## 📋 Available Samples and Expected Diagram Outcomes
 
 ### 1. `sample_leave_request.xlsx` (Excel Template)
-- **Format**: Microsoft Excel (.xlsx workbook with `Process`, `Roles`, `Example`, and `Instructions` sheets).
-- **Description**: Complete 8-step employee leave request and approval process.
-- **Expected BPMN Output**:
-  - **3 Swimlanes**: `Employee`, `Manager`, `HR`.
-  - **1 Start Event** and **2 End Events** (`Leave Approved`, `Leave Rejected`).
-  - **1 Exclusive Gateway (XOR)**: Manager approval check with "Approved" branching to Step 4 and "Rejected" branching to Step 8.
-  - **1 Parallel Gateway Pair (AND fork/join)**: Group `G1` synchronizing parallel tasks (*Send Calendar Invite* in Employee lane and *Update Payroll Records* in HR lane).
+- **Format**: Microsoft Excel (.xlsx workbook with `Process`, `Roles`, `Example`, `Instructions` and hidden `_meta` sheets).
+- **Description**: Employee leave request and approval process captured in the fill-in template.
+- **Expected BPMN Output** (deterministic, identical in every mode):
+  - **5 Swimlanes**: `Employee`, `HR`, `Manager`, `Finance`, `System`.
+  - **1 Start Event** and **2 End Events** (`Notify Rejection & Close`, `End`).
+  - **2 Exclusive Gateways (XOR)**: `Check Leave Balance` and `Manager Approval`, each with `Yes` / `No` branches; the `No` branch of `Manager Approval` loops back to `Submit Leave Request` (reported once as a loop to confirm).
+  - **1 Parallel Gateway Pair (AND split/join)**: group `G1` running `Record in Payroll` (Finance) and `Update HR Calendar` (HR) simultaneously.
+  - Every element carries a source reference to its sheet row (visible in the inspector's Source tab).
 
 ---
 
@@ -63,8 +69,8 @@ This directory contains ready-to-convert sample inputs in various formats (.xlsx
 
 ### 7. `sample_process_steps.csv` (Spreadsheet Table)
 - **Format**: Comma-separated values (`.csv`).
-- **Description**: Loan underwriting process table with condition branches.
-- **Expected BPMN Output**: Loan application review with credit check gateway and underwriting outcomes.
+- **Description**: Order-to-cash step list in the legacy column layout (`Step ID`, `Actor / Role`, `Activity Name`, `Next Step`, `Condition / Rule`, `System`). Multiple targets in `Next Step` (`STEP_04 / STEP_05`) become a decision; the condition on each target row labels its branch.
+- **Expected BPMN Output** (deterministic): 7 swimlanes (Customer, Sales Representative, System, Warehouse Operator, Procurement Officer, Logistics Coordinator, Finance Specialist), one exclusive gateway after `Check Inventory Availability` with branches `Stock Available` and `Out of Stock`, a restock loop back into picking, and a single end event.
 
 ---
 
