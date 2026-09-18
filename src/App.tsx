@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ProcessIR,
   FlowNode,
@@ -9,36 +9,33 @@ import {
   LLMSettings,
   TemplateRecord,
   BulkExportData,
+  ValidationIssue,
 } from './types';
-import { BpmnViewerComponent } from './components/BpmnViewer';
-import { SourceViewer } from './components/SourceViewer';
-import { ProfileSelector } from './components/ProfileSelector';
-import { AmbiguityDrawer } from './components/AmbiguityDrawer';
-import { SettingsModal } from './components/SettingsModal';
-import { TemplateManager } from './components/TemplateManager';
-import { LaneMappingModal } from './components/LaneMappingModal';
-import { InfoTooltip } from './components/InfoTooltip';
-import {
-  Layers,
-  Sparkles,
-  Settings as SettingsIcon,
-  GitCommit,
-  CheckCircle,
-  HelpCircle,
-  Activity,
-  AlertCircle,
-  GitMerge,
-} from 'lucide-react';
+import { BpmnViewerComponent, BpmnViewerHandle } from './components/BpmnViewer';
+import { Toolbar } from './components/layout/Toolbar';
+import { Sidebar } from './components/layout/Sidebar';
+import { Inspector } from './components/layout/Inspector';
+import { FloatingControls } from './components/layout/FloatingControls';
+import { EmptyState } from './components/layout/EmptyState';
+import { SettingsSheet } from './components/sheets/SettingsSheet';
+import { TemplateManagerSheet } from './components/sheets/TemplateManagerSheet';
+import { LaneMappingSheet } from './components/sheets/LaneMappingSheet';
+import { Toast, ToastMessage } from './components/ui/Toast';
 
 export default function App() {
+  const viewerRef = useRef<BpmnViewerHandle>(null);
+
+  // Core Process Inputs
   const [inputText, setInputText] = useState<string>('');
   const [normalizedText, setNormalizedText] = useState<string>('');
   const [filename, setFilename] = useState<string>('sample_sop.md');
+  const [fileSize, setFileSize] = useState<number | undefined>(undefined);
   const [profiles, setProfiles] = useState<ProfileMetadata[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>('signavio');
   const [samples, setSamples] = useState<SampleFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [sidebarError, setSidebarError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   // Template Mode States
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
@@ -46,18 +43,23 @@ export default function App() {
   const [laneMap, setLaneMap] = useState<Record<string, string>>({});
   const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState<boolean>(false);
   const [isLaneMappingOpen, setIsLaneMappingOpen] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'input' | 'traceability'>('input');
+  // Layout View States
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
+  const [inspectorTab, setInspectorTab] = useState<'details' | 'source' | 'issues'>('details');
+
+  // Process Output States
   const [bpmnXml, setBpmnXml] = useState<string>('');
   const [processIr, setProcessIr] = useState<ProcessIR | null>(null);
   const [selectedElementId, setSelectedElementId] = useState<string | undefined>(undefined);
   const [lintResult, setLintResult] = useState<LintResult | undefined>(undefined);
+  const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
   const [conversionMeta, setConversionMeta] = useState<any>(null);
   const [bulkExport, setBulkExport] = useState<BulkExportData | undefined>(undefined);
 
-  const [isAmbiguityOpen, setIsAmbiguityOpen] = useState<boolean>(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-
+  // LLM Engine Settings
   const [settings, setSettings] = useState<LLMSettings>({
     provider: 'openai_compatible',
     model: 'llama3',
@@ -66,7 +68,7 @@ export default function App() {
     temperature: 0.1,
   });
 
-  // Load templates list
+  // Fetch templates list
   const fetchTemplates = () => {
     fetch('/api/templates')
       .then((res) => res.json())
@@ -78,7 +80,7 @@ export default function App() {
       .catch((err) => console.error('Failed to load templates:', err));
   };
 
-  // Load profiles, samples, and templates on initial mount
+  // Initial mount: load profiles, templates, samples
   useEffect(() => {
     fetch('/api/profiles')
       .then((res) => res.json())
@@ -96,13 +98,13 @@ export default function App() {
       .then((data) => {
         if (data.samples && data.samples.length > 0) {
           setSamples(data.samples);
-          // Auto-load sample SOP
           const defaultSample =
             data.samples.find((s: SampleFile) => s.name.includes('sop')) || data.samples[0];
           if (defaultSample) {
             setInputText(defaultSample.content);
             setFilename(defaultSample.name);
-            // Trigger automatic initial conversion (without template for golden standard)
+            setFileSize(new Blob([defaultSample.content]).size);
+            // Auto-load default diagram
             convertProcess(defaultSample.content, defaultSample.name, 'signavio', '', {}, false);
           }
         }
@@ -120,7 +122,7 @@ export default function App() {
   ) => {
     if (!textToConvert.trim()) return;
     setLoading(true);
-    setError(null);
+    setSidebarError(null);
 
     try {
       const payload = {
@@ -144,7 +146,21 @@ export default function App() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.error || `Conversion failed: ${res.statusText}`);
+        const errMsg = errData.detail || errData.error || `Conversion failed (${res.status})`;
+
+        if (res.status === 502 || errMsg.toLowerCase().includes('llm')) {
+          setToast({
+            id: String(Date.now()),
+            type: 'error',
+            title: 'LLM Gateway Error (502)',
+            message: `${settings.provider} / ${settings.model}: ${errMsg}`,
+            action: {
+              label: 'Open Settings',
+              onClick: () => setIsSettingsOpen(true),
+            },
+          });
+        }
+        throw new Error(errMsg);
       }
 
       const data: ConversionResponse = await res.json();
@@ -156,10 +172,10 @@ export default function App() {
       setProcessIr(data.ir);
       setNormalizedText(data.normalized_text);
       setLintResult(data.lint_result);
+      setValidationIssues(data.validation_issues || []);
       setConversionMeta(data.metadata);
       setBulkExport(data.bulk_export);
 
-      // If backend returned template info with auto lane map, save it
       if (data.template_info?.lane_map) {
         setLaneMap((prev) => ({
           ...prev,
@@ -167,13 +183,12 @@ export default function App() {
         }));
       }
 
-      // Default select first element if available
       if (data.ir.elements && data.ir.elements.length > 0) {
         setSelectedElementId(data.ir.elements[0].id);
       }
     } catch (err: any) {
       console.error('Conversion error:', err);
-      setError(err.message || 'An error occurred during process conversion.');
+      setSidebarError(err.message || 'An error occurred during process conversion.');
     } finally {
       setLoading(false);
     }
@@ -182,13 +197,15 @@ export default function App() {
   const handleSelectSample = (sample: SampleFile) => {
     setInputText(sample.content);
     setFilename(sample.name);
+    setFileSize(new Blob([sample.content]).size);
     convertProcess(sample.content, sample.name, selectedProfileId, selectedTemplateId, laneMap);
   };
 
   const handleFileUpload = async (file: File) => {
     setFilename(file.name);
+    setFileSize(file.size);
     setLoading(true);
-    setError(null);
+    setSidebarError(null);
 
     try {
       const formData = new FormData();
@@ -211,7 +228,21 @@ export default function App() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.error || `Conversion failed: ${res.statusText}`);
+        const errMsg = errData.detail || errData.error || `Upload failed (${res.status})`;
+
+        if (res.status === 502) {
+          setToast({
+            id: String(Date.now()),
+            type: 'error',
+            title: 'LLM Gateway Error (502)',
+            message: `${settings.provider} / ${settings.model}: ${errMsg}`,
+            action: {
+              label: 'Open Settings',
+              onClick: () => setIsSettingsOpen(true),
+            },
+          });
+        }
+        throw new Error(errMsg);
       }
 
       const data: ConversionResponse = await res.json();
@@ -226,6 +257,7 @@ export default function App() {
         setInputText(data.normalized_text);
       }
       setLintResult(data.lint_result);
+      setValidationIssues(data.validation_issues || []);
       setConversionMeta(data.metadata);
       setBulkExport(data.bulk_export);
 
@@ -240,8 +272,8 @@ export default function App() {
         setSelectedElementId(data.ir.elements[0].id);
       }
     } catch (err: any) {
-      console.error('File upload conversion error:', err);
-      setError(err.message || 'An error occurred during file upload and conversion.');
+      console.error('File upload error:', err);
+      setSidebarError(err.message || 'Failed to parse and convert file.');
     } finally {
       setLoading(false);
     }
@@ -269,19 +301,18 @@ export default function App() {
 
   const handleTemplateChange = (newTemplateId: string) => {
     setSelectedTemplateId(newTemplateId);
-    // If user changed template, trigger re-conversion with new template bindings
     convertProcess(inputText, filename, selectedProfileId, newTemplateId, laneMap);
   };
 
   const handleApplyLaneMapping = (newLaneMap: Record<string, string>) => {
     setLaneMap(newLaneMap);
-    // Re-run conversion with updated lane mappings
     convertProcess(inputText, filename, selectedProfileId, selectedTemplateId, newLaneMap);
   };
 
   const handleElementSelectedInDiagram = (elementId: string) => {
     setSelectedElementId(elementId);
-    setActiveTab('traceability');
+    setIsInspectorOpen(true);
+    setInspectorTab('details');
   };
 
   const selectedNode: FlowNode | undefined = processIr?.elements?.find(
@@ -290,7 +321,7 @@ export default function App() {
 
   const activeTemplate = templates.find((t) => t.id === selectedTemplateId);
 
-  // Safely derive unique actors from IR elements and pools without unsafe spreads
+  // Derive detected actors for lane mapping
   const detectedActors: string[] = React.useMemo(() => {
     const actorSet = new Set<string>();
     if (processIr?.pools && Array.isArray(processIr.pools)) {
@@ -315,191 +346,132 @@ export default function App() {
     return Array.from(actorSet).filter(Boolean);
   }, [processIr, laneMap]);
 
+  const totalIssuesCount =
+    validationIssues.length +
+    (lintResult?.warnings?.length || 0) +
+    (processIr?.open_questions?.length || 0);
+
   return (
-    <div className="flex flex-col h-screen w-screen bg-stone-100 text-stone-900 overflow-hidden font-sans antialiased">
-      {/* Top Application Bar */}
-      <header className="h-14 bg-white border-b border-stone-200 px-4 flex items-center justify-between shrink-0 shadow-2xs z-20">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-2xs">
-              <Activity className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-bold text-sm tracking-tight text-stone-900">Text2BPMN</h1>
-                <span className="px-1.5 py-0.2 bg-stone-100 text-stone-600 rounded text-[10px] font-mono font-medium border border-stone-200">
-                  BPMN 2.0
-                </span>
-                <InfoTooltip
-                  title="Text2BPMN Pipeline"
-                  content="Converts unstructured or structured business process descriptions into compliant, standards-based BPMN 2.0 XML with deterministic Sugiyama layout."
-                />
-              </div>
-              <p className="text-[11px] text-stone-500 leading-none">
-                Vendor-Agnostic Process Description to BPMNDI 2.0 Pipeline
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Center: Metadata / Metrics stats if available */}
-        {conversionMeta && (
-          <div className="hidden lg:flex items-center gap-4 text-xs text-stone-600 bg-stone-50 px-3 py-1 rounded-lg border border-stone-200/80">
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-stone-800">{conversionMeta.element_count}</span>
-              <span className="text-stone-400">elements</span>
-            </div>
-            <span className="text-stone-300">•</span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-stone-800">{conversionMeta.flow_count}</span>
-              <span className="text-stone-400">flows</span>
-            </div>
-            <span className="text-stone-300">•</span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-stone-800">
-                {conversionMeta.lane_count || 1}
-              </span>
-              <span className="text-stone-400">swimlanes</span>
-            </div>
-
-            {activeTemplate && (
-              <>
-                <span className="text-stone-300">•</span>
-                <div className="flex items-center gap-1 text-purple-700 font-medium">
-                  <Layers className="w-3 h-3" />
-                  <span>{activeTemplate.name}</span>
-                  <InfoTooltip
-                    title="Active Reference Template"
-                    content={`Diagram adheres to ${activeTemplate.name} (${activeTemplate.source_vendor.toUpperCase()}) definitions and swimlane bounds.`}
-                  />
-                </div>
-              </>
-            )}
-
-            <span className="text-stone-300">•</span>
-            <div className="flex items-center gap-1 text-[11px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="text-stone-500">
-                {conversionMeta.extraction?.mode || 'extracted'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Right: Controls & Actions */}
-        <div className="flex items-center gap-2">
-          <ProfileSelector
-            profiles={profiles}
-            selectedProfileId={selectedProfileId}
-            onSelectProfile={handleProfileChange}
-            lintResult={lintResult}
-          />
-
-          <AmbiguityDrawer
-            openQuestions={processIr?.open_questions || []}
-            assumptions={lintResult?.assumptions || processIr?.assumptions || []}
-            validationIssues={[]}
-            isOpen={isAmbiguityOpen}
-            onToggle={() => setIsAmbiguityOpen(!isAmbiguityOpen)}
-          />
-
-          <div className="flex items-center gap-1">
-            <button
-              id="open-settings-btn"
-              onClick={() => setIsSettingsOpen(true)}
-              title="Configure LLM Provider & Settings"
-              className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg border border-stone-200 transition-colors cursor-pointer"
-            >
-              <SettingsIcon className="w-4 h-4" />
-            </button>
-            <InfoTooltip
-              title="LLM Settings"
-              content="Configure connection details for local (Ollama/LM Studio), OpenAI-compatible, Anthropic, or Gemini providers."
-            />
-          </div>
-        </div>
-      </header>
-
-      {/* Error notification banner if any */}
-      {error && (
-        <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-xs text-red-700 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-            <span>{error}</span>
-          </div>
-          <button
-            onClick={() => setError(null)}
-            className="font-bold text-red-500 hover:text-red-800"
-          >
-            &times;
-          </button>
-        </div>
-      )}
-
-      {/* Main Dual-Pane Layout */}
-      <main className="flex-1 flex overflow-hidden p-3 gap-3">
-        {/* Left Pane: Source Document Input & Traceability (42% width) */}
-        <div className="w-[42%] min-w-[390px] max-w-[590px] h-full flex flex-col">
-          <SourceViewer
-            inputText={inputText}
-            setInputText={setInputText}
-            samples={samples}
-            onSelectSample={handleSelectSample}
-            onFileUpload={handleFileUpload}
-            onConvert={() =>
-              convertProcess(inputText, filename, selectedProfileId, selectedTemplateId, laneMap)
-            }
-            loading={loading}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            normalizedText={normalizedText}
-            selectedNode={selectedNode}
-            elements={processIr?.elements || []}
-            onSelectNodeById={(id) => setSelectedElementId(id)}
-            // Template integration
-            templates={templates}
-            selectedTemplateId={selectedTemplateId}
-            onSelectTemplate={handleTemplateChange}
-            onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
-            onOpenLaneMapping={() => setIsLaneMappingOpen(true)}
-            hasActors={detectedActors.length > 0}
-          />
-        </div>
-
-        {/* Right Pane: Interactive BPMN 2.0 Canvas (58% width) */}
-        <div className="flex-1 h-full flex flex-col min-w-0">
-          <BpmnViewerComponent
-            xml={bpmnXml}
-            selectedElementId={selectedElementId}
-            onSelectElement={handleElementSelectedInDiagram}
-            processName={processIr?.name || filename || 'Process'}
-            bulkExport={bulkExport}
-          />
-        </div>
-      </main>
-
-      {/* LLM Provider Configuration Modal */}
-      <SettingsModal
-        settings={settings}
-        onSave={(newSet) => setSettings(newSet)}
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+    <div className="flex flex-col h-screen w-screen bg-[var(--bg)] text-[var(--text)] overflow-hidden font-sans select-none">
+      {/* 1. Translucent Top Toolbar (52px) */}
+      <Toolbar
+        appName="process2bpmn"
+        profiles={profiles}
+        selectedProfileId={selectedProfileId}
+        onSelectProfile={handleProfileChange}
+        templates={templates}
+        selectedTemplateId={selectedTemplateId}
+        onSelectTemplate={handleTemplateChange}
+        onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
+        onOpenLaneMapping={() => setIsLaneMappingOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        hasDiagram={Boolean(bpmnXml)}
+        onExportBpmn={() => viewerRef.current?.exportBpmn()}
+        onExportSvg={() => viewerRef.current?.exportSvg()}
+        onExportPng={() => viewerRef.current?.exportPng()}
+        onExportZip={() => viewerRef.current?.exportZip()}
       />
 
-      {/* BPMN Reference Template Manager Modal */}
-      <TemplateManager
+      {/* 2. Main Stage: Left Sidebar + Full Canvas + Right Inspector */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Sidebar (320px -> 44px) */}
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+          inputText={inputText}
+          onInputChange={setInputText}
+          fileName={filename}
+          fileSize={fileSize}
+          onFileUpload={handleFileUpload}
+          samples={samples}
+          onSelectSample={handleSelectSample}
+          onConvert={() =>
+            convertProcess(inputText, filename, selectedProfileId, selectedTemplateId, laneMap)
+          }
+          isLoading={loading}
+          error={sidebarError}
+        />
+
+        {/* Center: BPMN Canvas (Fills Remaining Space with 16px Inset, No Card Border) */}
+        <main className="flex-1 h-full relative overflow-hidden flex flex-col p-4">
+          <div className="relative w-full h-full rounded-[16px] overflow-hidden bg-[var(--surface-solid)]">
+            {bpmnXml ? (
+              <>
+                <BpmnViewerComponent
+                  ref={viewerRef}
+                  xml={bpmnXml}
+                  selectedElementId={selectedElementId}
+                  onSelectElement={handleElementSelectedInDiagram}
+                  processName={processIr?.name || filename || 'process'}
+                  bulkExport={bulkExport}
+                  isLoading={loading}
+                />
+
+                {/* Floating Controls */}
+                <FloatingControls
+                  elementCount={conversionMeta?.element_count || processIr?.elements?.length || 0}
+                  flowCount={conversionMeta?.flow_count || processIr?.flows?.length || 0}
+                  laneCount={conversionMeta?.lane_count || processIr?.pools?.reduce((acc, p) => acc + p.lanes.length, 0) || 1}
+                  extractionMode={conversionMeta?.extraction?.mode}
+                  issuesCount={totalIssuesCount}
+                  onOpenIssues={() => {
+                    setIsInspectorOpen(true);
+                    setInspectorTab('issues');
+                  }}
+                  onZoomIn={() => viewerRef.current?.zoomIn()}
+                  onZoomOut={() => viewerRef.current?.zoomOut()}
+                  onFitViewport={() => viewerRef.current?.fitViewport()}
+                  onResetZoom={() => viewerRef.current?.resetZoom()}
+                />
+              </>
+            ) : (
+              <EmptyState
+                onFileUpload={handleFileUpload}
+                samples={samples}
+                onSelectSample={handleSelectSample}
+              />
+            )}
+          </div>
+        </main>
+
+        {/* Right Inspector (360px) */}
+        <Inspector
+          isOpen={isInspectorOpen}
+          onClose={() => setIsInspectorOpen(false)}
+          activeTab={inspectorTab}
+          onTabChange={setInspectorTab}
+          selectedElement={selectedNode}
+          processIr={processIr}
+          validationIssues={validationIssues}
+          lintResult={lintResult}
+          sourceText={normalizedText || inputText}
+          onSelectElementById={(id) => {
+            setSelectedElementId(id);
+            setInspectorTab('details');
+          }}
+        />
+      </div>
+
+      {/* 3. Slide-over Sheets */}
+      <SettingsSheet
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onSave={setSettings}
+      />
+
+      <TemplateManagerSheet
         isOpen={isTemplateManagerOpen}
         onClose={() => {
           setIsTemplateManagerOpen(false);
           fetchTemplates();
         }}
-        onSelectTemplate={(tplId) => handleTemplateChange(tplId)}
+        onSelectTemplate={handleTemplateChange}
         selectedTemplateId={selectedTemplateId}
       />
 
-      {/* Swimlane Role Mapping Modal */}
       {activeTemplate && (
-        <LaneMappingModal
+        <LaneMappingSheet
           isOpen={isLaneMappingOpen}
           onClose={() => setIsLaneMappingOpen(false)}
           templateId={activeTemplate.id}
@@ -509,6 +481,9 @@ export default function App() {
           onApplyMapping={handleApplyLaneMapping}
         />
       )}
+
+      {/* 4. Global Toast for Transient Errors */}
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

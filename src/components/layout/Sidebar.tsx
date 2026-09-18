@@ -1,0 +1,299 @@
+import React, { useRef, useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  Upload,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+  BookOpen,
+  ArrowRight,
+  Sparkles,
+  FileCode,
+  AlertCircle,
+  FileSpreadsheet,
+} from 'lucide-react';
+import { SampleFile } from '../../types';
+import { Button } from '../ui/Button';
+import { Textarea } from '../ui/Field';
+import { Popover } from '../ui/Popover';
+
+export interface SidebarProps {
+  isOpen: boolean;
+  onToggle: () => void;
+  inputText: string;
+  onInputChange: (text: string) => void;
+  fileName?: string;
+  fileSize?: number;
+  onFileUpload: (file: File) => void;
+  samples: SampleFile[];
+  onSelectSample: (sample: SampleFile) => void;
+  onConvert: () => void;
+  isLoading: boolean;
+  error?: string | null;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  isOpen,
+  onToggle,
+  inputText,
+  onInputChange,
+  fileName,
+  fileSize,
+  onFileUpload,
+  samples,
+  onSelectSample,
+  onConvert,
+  isLoading,
+  error,
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isSamplesOpen, setIsSamplesOpen] = useState(false);
+
+  // Keyboard shortcut ⌘\ or Ctrl+\ to toggle sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault();
+        onToggle();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onToggle]);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      onFileUpload(file);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onFileUpload(file);
+    }
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileExtension = (name?: string) => {
+    if (!name) return '';
+    const parts = name.split('.');
+    return parts.length > 1 ? parts.pop()?.toUpperCase() : '';
+  };
+
+  return (
+    <motion.aside
+      initial={false}
+      animate={{ width: isOpen ? 320 : 44 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      className="relative h-full bg-[var(--surface-solid)] border-r border-[var(--separator)] flex flex-col shrink-0 overflow-hidden z-20 select-none"
+    >
+      {/* Collapsed 44px Rail */}
+      {!isOpen && (
+        <div className="w-[44px] h-full flex flex-col items-center py-3 gap-3">
+          <button
+            onClick={onToggle}
+            title="Expand Sidebar (⌘\)"
+            className="w-8 h-8 rounded-[8px] flex items-center justify-center text-[var(--text-secondary-color)] hover:text-[var(--text)] hover:bg-[var(--surface-subtle)] transition-colors cursor-pointer"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <div className="w-5 h-px bg-[var(--separator)]" />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="Upload File"
+            className="w-8 h-8 rounded-[8px] flex items-center justify-center text-[var(--text-secondary-color)] hover:text-[var(--text)] hover:bg-[var(--surface-subtle)] transition-colors cursor-pointer"
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onToggle}
+            title="Edit Input Text"
+            className="w-8 h-8 rounded-[8px] flex items-center justify-center text-[var(--text-secondary-color)] hover:text-[var(--text)] hover:bg-[var(--surface-subtle)] transition-colors cursor-pointer"
+          >
+            <FileText className="w-4 h-4" />
+          </button>
+          <div className="mt-auto">
+            <button
+              onClick={onConvert}
+              disabled={isLoading || (!inputText.trim() && !fileName)}
+              title="Convert Process"
+              className="w-8 h-8 rounded-[8px] flex items-center justify-center bg-[var(--accent)] text-white disabled:opacity-50 transition-opacity cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded 320px Sidebar Content */}
+      {isOpen && (
+        <div className="w-[320px] h-full flex flex-col justify-between p-4 overflow-y-auto">
+          <div className="space-y-4">
+            {/* Header: Title & Collapse Button */}
+            <div className="flex items-center justify-between pb-1">
+              <span className="text-[13px] font-semibold text-[var(--text)]">
+                Process Input
+              </span>
+              <button
+                onClick={onToggle}
+                title="Collapse Sidebar (⌘\)"
+                className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[var(--text-secondary-color)] hover:text-[var(--text)] hover:bg-[var(--surface-subtle)] transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drop Zone */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileInputChange}
+              accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt"
+              className="hidden"
+            />
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`p-4 rounded-[12px] border-2 border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center gap-2 ${
+                isDragging
+                  ? 'border-[var(--accent)] bg-[var(--accent-subtle)]'
+                  : 'border-[var(--separator-strong)] bg-[var(--surface-subtle)] hover:bg-[var(--surface-solid)]'
+              }`}
+            >
+              <div className="w-9 h-9 rounded-full bg-[var(--surface-solid)] border border-[var(--separator)] flex items-center justify-center text-[var(--accent)] shadow-xs">
+                <Upload className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[13px] font-medium text-[var(--text)]">
+                  Drop file or click to browse
+                </p>
+                <p className="text-[12px] text-[var(--text-secondary-color)] mt-0.5">
+                  .docx, .xlsx, .pdf, .csv, .txt, .md
+                </p>
+              </div>
+            </div>
+
+            {/* Detected File Info Caption */}
+            {fileName && (
+              <div className="px-3 py-2 bg-[var(--surface-subtle)] rounded-[8px] border border-[var(--separator)] flex items-center justify-between text-[12px]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+                  <span className="truncate text-[var(--text)] font-medium">
+                    {fileName}
+                  </span>
+                </div>
+                <div className="shrink-0 text-[var(--text-secondary-color)] ml-2">
+                  {getFileExtension(fileName)} {fileSize ? `· ${formatFileSize(fileSize)}` : ''}
+                </div>
+              </div>
+            )}
+
+            {/* Inline Error under Dropzone if any */}
+            {error && (
+              <div className="p-2.5 rounded-[8px] bg-[var(--danger-subtle)] text-[var(--danger)] text-[12px] flex items-start gap-1.5 leading-snug">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Raw Text Input Area */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[13px] font-medium text-[var(--text)]">
+                  Or paste process text
+                </label>
+                {/* Samples Popover */}
+                <Popover
+                  id="samples-popover"
+                  isOpen={isSamplesOpen}
+                  onClose={() => setIsSamplesOpen(false)}
+                  trigger={
+                    <button
+                      type="button"
+                      onClick={() => setIsSamplesOpen(!isSamplesOpen)}
+                      className="text-[12px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
+                    >
+                      <BookOpen className="w-3 h-3" />
+                      <span>Samples</span>
+                    </button>
+                  }
+                >
+                  <div className="w-60 p-1.5 space-y-1 text-left">
+                    <div className="px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary-color)]">
+                      Load Sample Process
+                    </div>
+                    {samples.map((s) => (
+                      <button
+                        key={s.name}
+                        onClick={() => {
+                          onSelectSample(s);
+                          setIsSamplesOpen(false);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-[8px] text-[13px] text-[var(--text)] hover:bg-[var(--surface-subtle)] text-left truncate transition-colors cursor-pointer"
+                      >
+                        <div className="truncate font-medium">{s.title || s.name}</div>
+                        <div className="text-[12px] text-[var(--text-secondary-color)] uppercase">
+                          .{s.extension}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </Popover>
+              </div>
+
+              <Textarea
+                value={inputText}
+                onChange={(e) => onInputChange(e.target.value)}
+                placeholder="Paste steps, interview notes, or SOP..."
+                rows={9}
+              />
+            </div>
+          </div>
+
+          {/* Primary Convert Button */}
+          <div className="pt-4 border-t border-[var(--separator)]">
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={onConvert}
+              isLoading={isLoading}
+              disabled={isLoading || (!inputText.trim() && !fileName)}
+              className="w-full"
+              icon={<Sparkles className="w-4 h-4" />}
+            >
+              {isLoading ? 'Converting Process...' : 'Convert Process'}
+            </Button>
+            <div className="text-center mt-2">
+              <span className="text-[12px] text-[var(--text-tertiary)]">
+                Shortcut: ⌘\ to toggle sidebar
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </motion.aside>
+  );
+};
