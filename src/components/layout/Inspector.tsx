@@ -28,6 +28,7 @@ export interface InspectorProps {
   sourceText: string;
   onSelectElementById?: (id: string) => void;
   isBottomSheet?: boolean;
+  exportBlocked?: boolean;
 }
 
 export const Inspector: React.FC<InspectorProps> = ({
@@ -42,6 +43,7 @@ export const Inspector: React.FC<InspectorProps> = ({
   sourceText,
   onSelectElementById,
   isBottomSheet = false,
+  exportBlocked = false,
 }) => {
   const highlightRef = useRef<HTMLDivElement>(null);
 
@@ -240,6 +242,18 @@ export const Inspector: React.FC<InspectorProps> = ({
       {/* Tab 3: Issues (Validation, Linting, Questions) */}
       {activeTab === 'issues' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-4 text-left">
+          {exportBlocked && (
+            <div className="p-3 bg-[var(--danger-subtle)] border border-[var(--danger)]/30 rounded-[8px] flex items-start gap-2.5 text-[var(--danger)]">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="text-[13px] font-semibold">BPMN Export Blocked</p>
+                <p className="text-[12px] opacity-90 leading-tight">
+                  Critical graph errors (such as unreachable steps or unlabeled decision branches) must be resolved before exporting.
+                </p>
+              </div>
+            </div>
+          )}
+
           {totalIssuesCount === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[var(--text-secondary-color)]">
               <CheckCircle className="w-8 h-8 text-[var(--success)] mb-2" />

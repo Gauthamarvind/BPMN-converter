@@ -133,6 +133,7 @@ export interface BulkExportData {
 
 export interface ConversionResponse {
   success: boolean;
+  export_blocked?: boolean;
   bpmn_xml: string;
   ir: ProcessIR;
   validation_issues: ValidationIssue[];

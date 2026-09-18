@@ -44,6 +44,7 @@ from backend.pipeline.chunker import ProcessExtractor
 from backend.pipeline.validator import ProcessValidator
 from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
+from backend.pipeline.xsd_validator import BpmnSchemaError, BpmnSchemaConfigurationError
 from backend.pipeline.linter import ProfileLinter
 from backend.pipeline.process_pipeline import process_pipeline
 from backend.cli import generate_mock_ir_from_text
@@ -85,6 +86,31 @@ async def ingestion_error_handler(request: Request, exc: IngestionError):
     return JSONResponse(
         status_code=400,
         content={"error": str(exc), "detail": str(exc), "kind": "IngestionError"}
+    )
+
+
+@app.exception_handler(BpmnSchemaError)
+async def bpmn_schema_error_handler(request: Request, exc: BpmnSchemaError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": str(exc),
+            "detail": str(exc),
+            "kind": "BpmnSchemaError",
+            "errors": exc.errors,
+        }
+    )
+
+
+@app.exception_handler(BpmnSchemaConfigurationError)
+async def bpmn_schema_configuration_error_handler(request: Request, exc: BpmnSchemaConfigurationError):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": str(exc),
+            "detail": str(exc),
+            "kind": "BpmnSchemaConfigurationError",
+        }
     )
 
 

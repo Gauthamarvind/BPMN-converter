@@ -181,6 +181,17 @@ class SugiyamaLayoutEngine:
                         )
                     )
 
+        # Position DataObjects
+        for idx, do in enumerate(getattr(self.ir, "dataObjects", [])):
+            do_ref_id = f"DataObjectRef_{do.id}"
+            do_x = self.start_x + 40.0 + (idx * 90.0)
+            do_y = self.start_y + 15.0
+            layout.nodes[do_ref_id] = NodeLayout(
+                element_id=do_ref_id,
+                bounds=Bounds(x=do_x, y=do_y, width=36.0, height=50.0),
+                label_bounds=Bounds(x=do_x - 10.0, y=do_y + 52.0, width=56.0, height=14.0)
+            )
+
         # 4. Orthogonal Sequence Flow Routing
         self._route_edges(layout)
 

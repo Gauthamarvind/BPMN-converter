@@ -67,6 +67,7 @@ export default function App() {
   // Process Output States
   const [bpmnXml, setBpmnXml] = useState<string>('');
   const [processIr, setProcessIr] = useState<ProcessIR | null>(null);
+  const [exportBlocked, setExportBlocked] = useState<boolean>(false);
   const [selectedElementId, setSelectedElementId] = useState<string | undefined>(undefined);
   const [lintResult, setLintResult] = useState<LintResult | undefined>(undefined);
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
@@ -187,6 +188,7 @@ export default function App() {
 
       setBpmnXml(data.bpmn_xml);
       setProcessIr(data.ir);
+      setExportBlocked(Boolean(data.export_blocked));
       setNormalizedText(data.normalized_text);
       setLintResult(data.lint_result);
       setValidationIssues(data.validation_issues || []);
@@ -272,6 +274,7 @@ export default function App() {
 
       setBpmnXml(data.bpmn_xml);
       setProcessIr(data.ir);
+      setExportBlocked(Boolean(data.export_blocked));
       setNormalizedText(data.normalized_text);
       if (data.normalized_text) {
         setInputText(data.normalized_text);
@@ -386,6 +389,7 @@ export default function App() {
         onOpenLaneMapping={() => setIsLaneMappingOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         hasDiagram={Boolean(bpmnXml)}
+        exportBlocked={exportBlocked}
         onExportBpmn={() => viewerRef.current?.exportBpmn()}
         onExportSvg={() => viewerRef.current?.exportSvg()}
         onExportPng={() => viewerRef.current?.exportPng()}
@@ -465,6 +469,7 @@ export default function App() {
           processIr={processIr}
           validationIssues={validationIssues}
           lintResult={lintResult}
+          exportBlocked={exportBlocked}
           sourceText={normalizedText || inputText}
           isBottomSheet={isBelow1100}
           onSelectElementById={(id) => {

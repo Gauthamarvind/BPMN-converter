@@ -61,6 +61,7 @@ class FlowNode(BaseModel):
     name: str
     laneId: str = ""
     documentation: str = ""
+    timerDuration: str = ""
     confidence: float = 1.0
     sourceRefs: List[SourceRef] = Field(default_factory=list)
 
@@ -143,6 +144,7 @@ class ProcessIR(BaseModel):
                     name=e.get("name", ""),
                     laneId=e.get("laneId", ""),
                     documentation=e.get("documentation", ""),
+                    timerDuration=e.get("timerDuration", ""),
                     confidence=float(e.get("confidence", 1.0)),
                     sourceRefs=sources
                 )

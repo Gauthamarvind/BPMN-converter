@@ -21,6 +21,7 @@ from backend.pipeline.chunker import ProcessExtractor
 from backend.pipeline.validator import ProcessValidator
 from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
+from backend.pipeline.xsd_validator import validate_bpmn, BpmnSchemaError
 from backend.pipeline.linter import ProfileLinter
 from backend.cli import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
@@ -198,6 +199,14 @@ def process_pipeline(
         serializer = BpmnXmlSerializer(repaired_ir, layout, profile_config)
         bpmn_xml = serializer.serialize()
 
+    # Strict BPMN 2.0 XSD Schema Validation
+    schema_errors = validate_bpmn(bpmn_xml)
+    if schema_errors:
+        raise BpmnSchemaError(
+            f"Generated BPMN XML failed XSD schema validation ({len(schema_errors)} errors)",
+            errors=schema_errors
+        )
+
     # 8. Multi-Profile Bulk Export Metadata
     supported_profiles = ["generic", "camunda", "signavio", "celonis", "aris"]
     bulk_export = {
@@ -206,10 +215,13 @@ def process_pipeline(
         "available_formats": [".bpmn", ".svg", ".png"]
     }
 
-    logger.info(f"[ProcessPipeline] Conversion successful for '{filename}'. Generated {len(bpmn_xml)} bytes XML.")
+    export_blocked = validator.export_blocked or any(iss.get("severity") == "ERROR" for iss in issues)
+
+    logger.info(f"[ProcessPipeline] Conversion successful for '{filename}'. Generated {len(bpmn_xml)} bytes XML. export_blocked={export_blocked}")
 
     return {
         "success": True,
+        "export_blocked": export_blocked,
         "bpmn_xml": bpmn_xml,
         "ir": repaired_ir.to_dict(),
         "validation_issues": issues,

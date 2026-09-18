@@ -5,15 +5,18 @@ gateway branching conditions, and parallel split-join pairing.
 """
 
 from __future__ import annotations
-from typing import List, Dict, Set, Tuple, Any
+from typing import List, Dict, Set, Tuple, Any, Optional
 from dataclasses import dataclass, field
 import re
+
+from backend.config import config
 from backend.ir.models import (
     ProcessIR,
     FlowNode,
     SequenceFlow,
     Pool,
     Lane,
+    OpenQuestion,
     NCNAME_REGEX,
     ALLOWED_ELEMENT_TYPES,
 )
@@ -45,14 +48,19 @@ def sanitize_ncname(raw_id: str, prefix: str = "id") -> str:
 class ProcessValidator:
     """
     Validates and auto-repairs a ProcessIR graph deterministically.
+    Only auto-fixes: NCName ID sanitizing, missing start/end event, lane assignment, removal of dangling references.
+    Reports errors for unreachable nodes and unlabeled gateways without mutating graph.
     """
 
-    def __init__(self, ir: ProcessIR):
+    def __init__(self, ir: ProcessIR, single_pool: Optional[bool] = None):
         self.ir = ir
+        self.single_pool = config.single_pool if single_pool is None else single_pool
         self.issues: List[ValidationIssue] = []
+        self.export_blocked: bool = False
 
     def validate_and_repair(self) -> Tuple[ProcessIR, List[ValidationIssue]]:
         self.issues.clear()
+        self.export_blocked = False
         
         if not getattr(self.ir, "pools", None):
             self.ir.pools = []
@@ -60,17 +68,19 @@ class ProcessValidator:
             self.ir.elements = []
         if not getattr(self.ir, "flows", None):
             self.ir.flows = []
+        if not getattr(self.ir, "openQuestions", None):
+            self.ir.openQuestions = []
 
         # 1. Sanitize & deduplicate IDs
         self._sanitize_ids()
 
-        # 2. Validate pools and lanes
+        # 2. Validate pools, lanes and single_pool configuration
         self._validate_pools_and_lanes()
 
         # 3. Ensure valid element types
         self._validate_element_types()
 
-        # 4. Prune completely invalid or orphan flows
+        # 4. Prune completely invalid or orphan flows (dangling references, direct self-loops)
         self._validate_flows()
 
         # 5. Ensure at least one start event and connect if needed
@@ -84,6 +94,9 @@ class ProcessValidator:
 
         # 8. Reachability graph check
         self._check_reachability()
+
+        if any(iss.severity == "ERROR" for iss in self.issues):
+            self.export_blocked = True
 
         return self.ir, self.issues
 
@@ -166,7 +179,7 @@ class ProcessValidator:
                 flow.targetId = id_remap[flow.targetId]
 
     def _validate_pools_and_lanes(self) -> None:
-        """Ensures at least one pool and lane exists; auto-assigns unmapped elements."""
+        """Ensures pools and lanes exist; applies single_pool merge if enabled."""
         if not self.ir.pools:
             default_lane = Lane(id="Lane_Default", name="General")
             default_pool = Pool(
@@ -179,6 +192,29 @@ class ProcessValidator:
                 severity="INFO",
                 message="Created default Participant pool and General lane",
                 element_id=default_pool.id,
+                auto_fixed=True
+            ))
+
+        # Single pool merge policy: when True, merge multiple pools into one pool
+        if self.single_pool and len(self.ir.pools) > 1:
+            first_pool = self.ir.pools[0]
+            all_lanes: List[Lane] = []
+            for p in self.ir.pools:
+                all_lanes.extend(p.lanes)
+            first_pool.lanes = all_lanes
+            self.ir.pools = [first_pool]
+
+            # Convert message flows to sequence flows
+            converted_count = 0
+            for f in self.ir.flows:
+                if f.type == "message":
+                    f.type = "sequence"
+                    converted_count += 1
+
+            self.issues.append(ValidationIssue(
+                severity="WARNING",
+                message=f"Single pool mode enabled: merged pools into '{first_pool.name}' and converted {converted_count} message flow(s) to sequence flow(s)",
+                element_id=first_pool.id,
                 auto_fixed=True
             ))
 
@@ -336,40 +372,28 @@ class ProcessValidator:
             ))
 
     def _validate_gateways(self) -> None:
-        """Ensures gateways with multiple outgoing branches have conditions or a default flow."""
+        """Ensures gateways with multiple outgoing branches have conditions or default flow. Does NOT auto-invent labels."""
         for elem in self.ir.elements:
-            if "gateway" in elem.type.lower() or "Gateway" in elem.type:
+            if elem.type in ("exclusiveGateway", "inclusiveGateway"):
                 outgoing = [f for f in self.ir.flows if f.sourceId == elem.id]
-                if len(outgoing) > 1 and elem.type in ("exclusiveGateway", "inclusiveGateway"):
+                if len(outgoing) > 1:
                     unlabeled = [f for f in outgoing if not f.condition and not f.name and not f.isDefault]
-                    if len(unlabeled) == len(outgoing):
-                        # Label branches clearly
-                        for idx, f in enumerate(outgoing):
-                            if idx == len(outgoing) - 1:
-                                f.isDefault = True
-                                f.name = "Default"
-                            else:
-                                f.condition = f"Option {idx + 1}"
-                                f.name = f"Option {idx + 1}"
+                    if unlabeled:
+                        self.export_blocked = True
+                        msg = f"Gateway '{elem.name or elem.id}' ({elem.id}) has {len(unlabeled)} unlabeled outgoing branch(es). Conditions or a default flow are required."
                         self.issues.append(ValidationIssue(
-                            severity="WARNING",
-                            message=f"Gateway '{elem.name}' ({elem.id}) had unlabeled branches; assigned conditions & default flow",
+                            severity="ERROR",
+                            message=msg,
                             element_id=elem.id,
-                            auto_fixed=True
+                            auto_fixed=False
                         ))
-                    elif unlabeled and not any(f.isDefault for f in outgoing):
-                        # Mark the first unlabeled flow as default
-                        unlabeled[0].isDefault = True
-                        unlabeled[0].name = "Otherwise / Default"
-                        self.issues.append(ValidationIssue(
-                            severity="INFO",
-                            message=f"Assigned default fallback flow to gateway '{elem.id}'",
-                            element_id=unlabeled[0].id,
-                            auto_fixed=True
+                        self.ir.openQuestions.append(OpenQuestion(
+                            topic="Gateway Branching",
+                            question=f"Gateway '{elem.name or elem.id}' ({elem.id}) has unlabeled outgoing branches. What condition triggers each branch?"
                         ))
 
     def _check_reachability(self) -> None:
-        """Flags nodes that cannot be reached from any startEvent."""
+        """Flags nodes that cannot be reached from any startEvent as ERROR without auto-bridging."""
         start_ids = [e.id for e in self.ir.elements if e.type == "startEvent"]
         if not start_ids:
             return
@@ -393,18 +417,15 @@ class ProcessValidator:
 
         unreachable = [e for e in self.ir.elements if e.id not in visited]
         for u in unreachable:
-            # Auto-repair: bridge from start event or previous node if isolated
-            bridge_flow = SequenceFlow(
-                id=f"Flow_bridge_{u.id}",
-                type="sequence",
-                sourceId=start_ids[0],
-                targetId=u.id,
-                name="Alternate Path"
-            )
-            self.ir.flows.append(bridge_flow)
+            self.export_blocked = True
+            msg = f"Element '{u.name or u.id}' ({u.id}) is unreachable from any start event."
             self.issues.append(ValidationIssue(
-                severity="WARNING",
-                message=f"Unreachable element '{u.name}' ({u.id}) bridged to '{start_ids[0]}'",
+                severity="ERROR",
+                message=msg,
                 element_id=u.id,
-                auto_fixed=True
+                auto_fixed=False
+            ))
+            self.ir.openQuestions.append(OpenQuestion(
+                topic="Unreachable Node",
+                question=f"Element '{u.name or u.id}' ({u.id}) cannot be reached from any start event. How should it connect to the flow?"
             ))

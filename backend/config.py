@@ -14,6 +14,9 @@ except ImportError:
     pass
 
 
+from backend.version import VERSION
+
+
 @dataclass
 class LLMConfig:
     provider: str = os.getenv("LLM_PROVIDER", "openai_compatible").lower()
@@ -29,8 +32,11 @@ class LLMConfig:
 @dataclass
 class AppConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
+    single_pool: bool = field(default_factory=lambda: os.getenv("SINGLE_POOL", "true").lower() in ("true", "1", "yes"))
     prompts_dir: Path = field(default_factory=lambda: Path(__file__).resolve().parent.parent / "prompts")
     profiles_dir: Path = field(default_factory=lambda: Path(__file__).resolve().parent.parent / "profiles")
+    version: str = VERSION
+
 
 
 config = AppConfig()

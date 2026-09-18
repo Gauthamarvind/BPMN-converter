@@ -22,6 +22,7 @@ export interface ToolbarProps {
   onExportZip: () => void;
   isExportingZip?: boolean;
   hasDiagram?: boolean;
+  exportBlocked?: boolean;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -41,6 +42,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onExportZip,
   isExportingZip,
   hasDiagram,
+  exportBlocked,
 }) => {
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -175,8 +177,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               variant="primary"
               size="lg"
               icon={<Download className="w-4 h-4" />}
-              disabled={!hasDiagram}
+              disabled={!hasDiagram || exportBlocked}
               onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+              title={exportBlocked ? 'Export blocked due to validation errors (see Issues tab)' : undefined}
             >
               Export
             </Button>
