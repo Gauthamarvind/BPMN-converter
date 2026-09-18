@@ -1,16 +1,22 @@
-# Dependencies
+# Dependencies & Packages
 node_modules/
 dist/
 
-# Python cache & artifacts
+# Python Cache & Runtime Artifacts
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
 
-# Environment secrets
+# Environment Variables & Secrets
 .env
 .env.local
+.env.*.local
 
-# Dynamic templates
+# Dynamic User Templates
 data/templates/tpl_*
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.log

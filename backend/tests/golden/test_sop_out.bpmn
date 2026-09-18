@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_Process_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Process2BPMN" exporterVersion="1.0.0">
+  <bpmn:collaboration id="Collaboration_Process_1">
+    <bpmn:participant id="Participant_1" name="Sample Sop" processRef="Process_1"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_1" name="Sample Sop" isExecutable="false">
+    <bpmn:documentation>Generated from: Sample Sop</bpmn:documentation>
+    <bpmn:laneSet id="LaneSet_Process_1">
+      <bpmn:lane id="Lane_1" name="- **Condition">
+        <bpmn:flowNodeRef>Event_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_8</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_13</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_2" name="Incident Managers">
+        <bpmn:flowNodeRef>Activity_1</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_3" name="Operations">
+        <bpmn:flowNodeRef>Activity_5</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_6</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_7</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_9</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_10</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_11</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_12</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_14</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_15</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_16</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Activity_17</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_4" name="failover execution">
+        <bpmn:flowNodeRef>Activity_4</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_5" name="logging">
+        <bpmn:flowNodeRef>Activity_2</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_6" name="stakeholder communication">
+        <bpmn:flowNodeRef>Activity_3</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_end</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Event_start" name="Start">
+      <bpmn:outgoing>Flow_Event_start_Activity_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Activity_1" name="Senior Infrastructure Engineers">
+      <bpmn:documentation>Applies to Tier 1 Support Agents, Incident Managers, Senior Infrastructure Engineers, and Quality Assurance Coordinators.</bpmn:documentation>
+      <bpmn:incoming>Flow_Event_start_Activity_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_1_Activity_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_2" name="and preliminary classification.">
+      <bpmn:documentation>- **Customer Support Agent (Tier 1)**: Initial triage, logging, and preliminary classification.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_1_Activity_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_2_Activity_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_3" name="post-incident review.">
+      <bpmn:documentation>- **Incident Commander**: Escalation governance, stakeholder communication, post-incident review.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_2_Activity_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_3_Activity_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_4" name="patch deployment.">
+      <bpmn:documentation>- **Site Reliability Engineer (SRE)**: Diagnostic investigation, failover execution, patch deployment.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_3_Activity_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_4_Activity_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_5" name="Customer Relationship Manager**: Client status briefings and">
+      <bpmn:documentation>- **Customer Relationship Manager**: Client status briefings and executive SLA monitoring.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_4_Activity_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_5_Activity_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_6" name="The customer lodges an incident ticket via the support porta">
+      <bpmn:documentation>1. The customer lodges an incident ticket via the support portal or emergency hotline.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_5_Activity_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_6_Activity_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_7" name="The Tier 1 Support Agent inspects the reported symptoms and ">
+      <bpmn:documentation>2. The Tier 1 Support Agent inspects the reported symptoms and verifies the customer's SLA tier.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_6_Activity_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_7_Activity_8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_8" name="Severity 1 (Critical Outage)**:">
+      <bpmn:documentation>- **Condition: Severity 1 (Critical Outage)**:</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_7_Activity_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_8_Activity_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_9" name="If service degradation impacts more than 10% of active users">
+      <bpmn:documentation>- If service degradation impacts more than 10% of active users, the Tier 1 Agent triggers an immediate Sev-1 Page.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_8_Activity_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_9_Activity_10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_10" name="The Incident Commander convenes an emergency bridge line wit">
+      <bpmn:documentation>- The Incident Commander convenes an emergency bridge line with the SRE on call.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_9_Activity_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_10_Activity_11</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_11" name="The SRE conducts root-cause triage and executes service rest">
+      <bpmn:documentation>- The SRE conducts root-cause triage and executes service restoration procedures.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_10_Activity_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_11_Activity_12</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_12" name="Upon successful mitigation, the Incident Commander publishes">
+      <bpmn:documentation>- Upon successful mitigation, the Incident Commander publishes an incident resolution report.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_11_Activity_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_12_Activity_13</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_13" name="Severity 2/3 (Standard Defect or Query)**:">
+      <bpmn:documentation>- **Condition: Severity 2/3 (Standard Defect or Query)**:</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_12_Activity_13</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_13_Activity_14</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_14" name="If the issue does not halt production, the ticket is routed ">
+      <bpmn:documentation>- If the issue does not halt production, the ticket is routed to the standard engineering backlog.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_13_Activity_14</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_14_Activity_15</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_15" name="A developer prioritizes the fix for the next sprint cycle.">
+      <bpmn:documentation>- A developer prioritizes the fix for the next sprint cycle.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_14_Activity_15</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_15_Activity_16</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_16" name="The Tier 1 Agent verifies service resumption with the client">
+      <bpmn:documentation>1. The Tier 1 Agent verifies service resumption with the client.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_15_Activity_16</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_16_Activity_17</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Activity_17" name="Once the client confirms satisfaction, the ticket is marked ">
+      <bpmn:documentation>2. Once the client confirms satisfaction, the ticket is marked Resolved and the workflow terminates.</bpmn:documentation>
+      <bpmn:incoming>Flow_Activity_16_Activity_17</bpmn:incoming>
+      <bpmn:outgoing>Flow_Activity_17_Event_end</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="Event_end" name="End">
+      <bpmn:incoming>Flow_Activity_17_Event_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Event_start_Activity_1" sourceRef="Event_start" targetRef="Activity_1"/>
+    <bpmn:sequenceFlow id="Flow_Activity_1_Activity_2" sourceRef="Activity_1" targetRef="Activity_2"/>
+    <bpmn:sequenceFlow id="Flow_Activity_2_Activity_3" sourceRef="Activity_2" targetRef="Activity_3"/>
+    <bpmn:sequenceFlow id="Flow_Activity_3_Activity_4" sourceRef="Activity_3" targetRef="Activity_4"/>
+    <bpmn:sequenceFlow id="Flow_Activity_4_Activity_5" sourceRef="Activity_4" targetRef="Activity_5"/>
+    <bpmn:sequenceFlow id="Flow_Activity_5_Activity_6" sourceRef="Activity_5" targetRef="Activity_6"/>
+    <bpmn:sequenceFlow id="Flow_Activity_6_Activity_7" sourceRef="Activity_6" targetRef="Activity_7"/>
+    <bpmn:sequenceFlow id="Flow_Activity_7_Activity_8" sourceRef="Activity_7" targetRef="Activity_8"/>
+    <bpmn:sequenceFlow id="Flow_Activity_8_Activity_9" sourceRef="Activity_8" targetRef="Activity_9"/>
+    <bpmn:sequenceFlow id="Flow_Activity_9_Activity_10" sourceRef="Activity_9" targetRef="Activity_10"/>
+    <bpmn:sequenceFlow id="Flow_Activity_10_Activity_11" sourceRef="Activity_10" targetRef="Activity_11"/>
+    <bpmn:sequenceFlow id="Flow_Activity_11_Activity_12" sourceRef="Activity_11" targetRef="Activity_12"/>
+    <bpmn:sequenceFlow id="Flow_Activity_12_Activity_13" sourceRef="Activity_12" targetRef="Activity_13"/>
+    <bpmn:sequenceFlow id="Flow_Activity_13_Activity_14" sourceRef="Activity_13" targetRef="Activity_14"/>
+    <bpmn:sequenceFlow id="Flow_Activity_14_Activity_15" sourceRef="Activity_14" targetRef="Activity_15"/>
+    <bpmn:sequenceFlow id="Flow_Activity_15_Activity_16" sourceRef="Activity_15" targetRef="Activity_16"/>
+    <bpmn:sequenceFlow id="Flow_Activity_16_Activity_17" sourceRef="Activity_16" targetRef="Activity_17"/>
+    <bpmn:sequenceFlow id="Flow_Activity_17_Event_end" sourceRef="Activity_17" targetRef="Event_end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_1" bpmnElement="Collaboration_Process_1">
+      <bpmndi:BPMNShape id="BPMNShape_Participant_1" bpmnElement="Participant_1" isHorizontal="true">
+        <dc:Bounds x="140.0" y="80.0" width="3800.0" height="1080.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_1" bpmnElement="Lane_1" isHorizontal="true">
+        <dc:Bounds x="170.0" y="80.0" width="3770.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_2" bpmnElement="Lane_2" isHorizontal="true">
+        <dc:Bounds x="170.0" y="260.0" width="3770.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_3" bpmnElement="Lane_3" isHorizontal="true">
+        <dc:Bounds x="170.0" y="440.0" width="3770.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_4" bpmnElement="Lane_4" isHorizontal="true">
+        <dc:Bounds x="170.0" y="620.0" width="3770.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_5" bpmnElement="Lane_5" isHorizontal="true">
+        <dc:Bounds x="170.0" y="800.0" width="3770.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Lane_6" bpmnElement="Lane_6" isHorizontal="true">
+        <dc:Bounds x="170.0" y="980.0" width="3770.0" height="180.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Event_start" bpmnElement="Event_start">
+        <dc:Bounds x="220.0" y="152.0" width="36.0" height="36.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="195.0" y="194.0" width="86.0" height="24.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_1" bpmnElement="Activity_1">
+        <dc:Bounds x="400.0" y="310.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_2" bpmnElement="Activity_2">
+        <dc:Bounds x="580.0" y="850.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_3" bpmnElement="Activity_3">
+        <dc:Bounds x="760.0" y="1030.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_4" bpmnElement="Activity_4">
+        <dc:Bounds x="940.0" y="670.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_5" bpmnElement="Activity_5">
+        <dc:Bounds x="1120.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_6" bpmnElement="Activity_6">
+        <dc:Bounds x="1300.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_7" bpmnElement="Activity_7">
+        <dc:Bounds x="1480.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_8" bpmnElement="Activity_8">
+        <dc:Bounds x="1660.0" y="130.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_9" bpmnElement="Activity_9">
+        <dc:Bounds x="1840.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_10" bpmnElement="Activity_10">
+        <dc:Bounds x="2020.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_11" bpmnElement="Activity_11">
+        <dc:Bounds x="2200.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_12" bpmnElement="Activity_12">
+        <dc:Bounds x="2380.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_13" bpmnElement="Activity_13">
+        <dc:Bounds x="2560.0" y="130.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_14" bpmnElement="Activity_14">
+        <dc:Bounds x="2740.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_15" bpmnElement="Activity_15">
+        <dc:Bounds x="2920.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_16" bpmnElement="Activity_16">
+        <dc:Bounds x="3100.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Activity_17" bpmnElement="Activity_17">
+        <dc:Bounds x="3280.0" y="490.0" width="100.0" height="80.0"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_Event_end" bpmnElement="Event_end">
+        <dc:Bounds x="3460.0" y="1052.0" width="36.0" height="36.0"/>
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="3435.0" y="1094.0" width="86.0" height="24.0"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Event_start_Activity_1" bpmnElement="Flow_Event_start_Activity_1">
+        <di:waypoint x="256.0" y="170.0"/>
+        <di:waypoint x="328.0" y="170.0"/>
+        <di:waypoint x="328.0" y="350.0"/>
+        <di:waypoint x="400.0" y="350.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_1_Activity_2" bpmnElement="Flow_Activity_1_Activity_2">
+        <di:waypoint x="500.0" y="350.0"/>
+        <di:waypoint x="540.0" y="350.0"/>
+        <di:waypoint x="540.0" y="890.0"/>
+        <di:waypoint x="580.0" y="890.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_2_Activity_3" bpmnElement="Flow_Activity_2_Activity_3">
+        <di:waypoint x="680.0" y="890.0"/>
+        <di:waypoint x="720.0" y="890.0"/>
+        <di:waypoint x="720.0" y="1070.0"/>
+        <di:waypoint x="760.0" y="1070.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_3_Activity_4" bpmnElement="Flow_Activity_3_Activity_4">
+        <di:waypoint x="860.0" y="1070.0"/>
+        <di:waypoint x="900.0" y="1070.0"/>
+        <di:waypoint x="900.0" y="710.0"/>
+        <di:waypoint x="940.0" y="710.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_4_Activity_5" bpmnElement="Flow_Activity_4_Activity_5">
+        <di:waypoint x="1040.0" y="710.0"/>
+        <di:waypoint x="1080.0" y="710.0"/>
+        <di:waypoint x="1080.0" y="530.0"/>
+        <di:waypoint x="1120.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_5_Activity_6" bpmnElement="Flow_Activity_5_Activity_6">
+        <di:waypoint x="1220.0" y="530.0"/>
+        <di:waypoint x="1300.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_6_Activity_7" bpmnElement="Flow_Activity_6_Activity_7">
+        <di:waypoint x="1400.0" y="530.0"/>
+        <di:waypoint x="1480.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_7_Activity_8" bpmnElement="Flow_Activity_7_Activity_8">
+        <di:waypoint x="1580.0" y="530.0"/>
+        <di:waypoint x="1620.0" y="530.0"/>
+        <di:waypoint x="1620.0" y="170.0"/>
+        <di:waypoint x="1660.0" y="170.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_8_Activity_9" bpmnElement="Flow_Activity_8_Activity_9">
+        <di:waypoint x="1760.0" y="170.0"/>
+        <di:waypoint x="1800.0" y="170.0"/>
+        <di:waypoint x="1800.0" y="530.0"/>
+        <di:waypoint x="1840.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_9_Activity_10" bpmnElement="Flow_Activity_9_Activity_10">
+        <di:waypoint x="1940.0" y="530.0"/>
+        <di:waypoint x="2020.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_10_Activity_11" bpmnElement="Flow_Activity_10_Activity_11">
+        <di:waypoint x="2120.0" y="530.0"/>
+        <di:waypoint x="2200.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_11_Activity_12" bpmnElement="Flow_Activity_11_Activity_12">
+        <di:waypoint x="2300.0" y="530.0"/>
+        <di:waypoint x="2380.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_12_Activity_13" bpmnElement="Flow_Activity_12_Activity_13">
+        <di:waypoint x="2480.0" y="530.0"/>
+        <di:waypoint x="2520.0" y="530.0"/>
+        <di:waypoint x="2520.0" y="170.0"/>
+        <di:waypoint x="2560.0" y="170.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_13_Activity_14" bpmnElement="Flow_Activity_13_Activity_14">
+        <di:waypoint x="2660.0" y="170.0"/>
+        <di:waypoint x="2700.0" y="170.0"/>
+        <di:waypoint x="2700.0" y="530.0"/>
+        <di:waypoint x="2740.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_14_Activity_15" bpmnElement="Flow_Activity_14_Activity_15">
+        <di:waypoint x="2840.0" y="530.0"/>
+        <di:waypoint x="2920.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_15_Activity_16" bpmnElement="Flow_Activity_15_Activity_16">
+        <di:waypoint x="3020.0" y="530.0"/>
+        <di:waypoint x="3100.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_16_Activity_17" bpmnElement="Flow_Activity_16_Activity_17">
+        <di:waypoint x="3200.0" y="530.0"/>
+        <di:waypoint x="3280.0" y="530.0"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_Flow_Activity_17_Event_end" bpmnElement="Flow_Activity_17_Event_end">
+        <di:waypoint x="3380.0" y="530.0"/>
+        <di:waypoint x="3420.0" y="530.0"/>
+        <di:waypoint x="3420.0" y="1070.0"/>
+        <di:waypoint x="3460.0" y="1070.0"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

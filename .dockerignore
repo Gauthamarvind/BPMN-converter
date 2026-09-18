@@ -1,0 +1,22 @@
+# Git
+.git
+.github
+
+# Dependencies & Build artifacts
+node_modules
+dist
+.pytest_cache
+__pycache__
+*.py[cod]
+*$py.class
+
+# Environment & local secrets
+.env
+.env.local
+.env.*.local
+
+# Dynamic templates runtime store
+data/templates/tpl_*
+
+# Local logs
+*.log

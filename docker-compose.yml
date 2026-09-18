@@ -1,0 +1,16 @@
+services:
+  process2bpmn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: process2bpmn
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - SINGLE_POOL=true
+      - PORT=8000
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
