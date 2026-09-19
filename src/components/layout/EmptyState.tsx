@@ -1,21 +1,15 @@
 import React, { useRef, useState } from 'react';
-import { Upload, ArrowUpRight, Sparkles, BookOpen, FileSpreadsheet, Layers, ArrowRight } from 'lucide-react';
-import { SampleFile } from '../../types';
-import { Badge } from '../ui/Badge';
-import { Button } from '../ui/Button';
+import { Upload, BookOpen, ArrowRight } from 'lucide-react';
+import { ACCEPTED_EXTENSIONS } from '../../lib/files';
 
 export interface EmptyStateProps {
   onFileUpload: (file: File) => void;
-  samples: SampleFile[];
-  onSelectSample: (sample: SampleFile) => void;
-  onOpenTemplatesAndSamples?: () => void;
+  onOpenTemplate?: () => void;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({
   onFileUpload,
-  samples,
-  onSelectSample,
-  onOpenTemplatesAndSamples,
+  onOpenTemplate,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -50,7 +44,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         {/* Secondary Description */}
         <p className="text-[15px] text-[var(--text-secondary-color)] mt-2 max-w-lg leading-relaxed mx-auto">
           Drop your SOP, Excel, Word, or PDF document to automatically generate
-          standards-compliant BPMN 2.0 diagrams.
+          standards-compliant BPMN 2.0 diagrams — or drop a .bpmn file exported from
+          another modelling tool to clean it up and re-export it.
         </p>
       </div>
 
@@ -62,7 +57,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           const file = e.target.files?.[0];
           if (file) onFileUpload(file);
         }}
-        accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt"
+        accept={ACCEPTED_EXTENSIONS}
         className="hidden"
       />
 
@@ -89,15 +84,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           </span>
         </div>
         <span className="text-[12px] text-[var(--text-tertiary)]">
-          Supports .docx, .xlsx, .pdf, .csv, .txt, .md, .vtt
+          Supports .docx, .xlsx, .pdf, .csv, .txt, .md, .vtt — or a .bpmn file from another tool
         </span>
       </div>
 
-      {/* Templates & Samples Feature Card */}
-      {onOpenTemplatesAndSamples && (
+      {/* Process capture template card */}
+      {onOpenTemplate && (
         <div
-          id="empty-state-templates-samples-card"
-          onClick={onOpenTemplatesAndSamples}
+          id="empty-state-template-card"
+          onClick={onOpenTemplate}
           className="w-full max-w-lg p-4 rounded-[12px] border border-[var(--separator)] bg-[var(--surface-subtle)] hover:bg-[var(--surface-solid)] hover:border-[var(--accent)] transition-all cursor-pointer flex items-center justify-between text-left group shadow-xs"
         >
           <div className="flex items-center gap-3.5">
@@ -106,10 +101,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             </div>
             <div>
               <div className="text-[14px] font-semibold text-[var(--text)] group-hover:text-[var(--accent)] transition-colors">
-                Templates & samples
+                Process capture template
               </div>
               <div className="text-[12px] text-[var(--text-secondary-color)]">
-                Download blank Excel & Word forms, or explore ready-made workflows
+                Download the blank Excel or Word form, with one filled-in example
               </div>
             </div>
           </div>
@@ -117,27 +112,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         </div>
       )}
 
-      {/* Row of Sample Chips */}
-      {samples.length > 0 && (
-        <div className="flex flex-col items-center gap-2.5">
-          <span className="text-[12px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-            Or try a quick sample
-          </span>
-          <div className="flex items-center gap-2 flex-wrap justify-center">
-            {samples.slice(0, 5).map((sample) => (
-              <Badge
-                key={sample.name}
-                variant="neutral"
-                size="md"
-                onClick={() => onSelectSample(sample)}
-                className="cursor-pointer hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all"
-              >
-                <span>{sample.title || sample.name}</span>
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

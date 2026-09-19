@@ -3,8 +3,8 @@ import {
   ProcessIR,
   FlowNode,
   ProfileMetadata,
-  SampleFile,
   ConversionResponse,
+  ImportInfo,
   LintResult,
   LLMSettings,
   TemplateRecord,
@@ -14,6 +14,7 @@ import {
   UiError,
 } from './types';
 import { describeApiError, describeUnexpectedError } from './lib/errors';
+import { isBpmnFile } from './lib/files';
 import { BpmnViewerComponent, BpmnViewerHandle } from './components/BpmnViewer';
 import { Toolbar } from './components/layout/Toolbar';
 import { Sidebar } from './components/layout/Sidebar';
@@ -22,9 +23,8 @@ import { FloatingControls } from './components/layout/FloatingControls';
 import { EmptyState } from './components/layout/EmptyState';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { TemplateManagerSheet } from './components/sheets/TemplateManagerSheet';
-import { TemplatesAndSamplesSheet } from './components/sheets/TemplatesAndSamplesSheet';
+import { TemplateSheet } from './components/sheets/TemplateSheet';
 import { LaneMappingSheet } from './components/sheets/LaneMappingSheet';
-import { StepBuilderSheet } from './components/sheets/StepBuilderSheet';
 import { Toast, ToastMessage } from './components/ui/Toast';
 import { RowValidationErrorItem } from './types';
 
@@ -38,6 +38,11 @@ class HandledApiError extends Error {
 }
 
 const SETTINGS_STORAGE_KEY = 'process2bpmn.settings.v1';
+
+/** Scope v2 default export target. The backend defaults to the same profile. */
+const DEFAULT_PROFILE_ID = 'celonis';
+
+
 
 function loadStoredSettings(): LLMSettings {
   const fallback: LLMSettings = { provider: '', model: '', baseUrl: '', apiKey: '', temperature: 0.1 };
@@ -57,11 +62,10 @@ export default function App() {
   // Core Process Inputs
   const [inputText, setInputText] = useState<string>('');
   const [normalizedText, setNormalizedText] = useState<string>('');
-  const [filename, setFilename] = useState<string>('sample_sop.md');
+  const [filename, setFilename] = useState<string>('process_input.txt');
   const [fileSize, setFileSize] = useState<number | undefined>(undefined);
   const [profiles, setProfiles] = useState<ProfileMetadata[]>([]);
-  const [selectedProfileId, setSelectedProfileId] = useState<string>('signavio');
-  const [samples, setSamples] = useState<SampleFile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(DEFAULT_PROFILE_ID);
   const [loading, setLoading] = useState<boolean>(false);
   const [sidebarError, setSidebarError] = useState<UiError | null>(null);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
@@ -72,9 +76,8 @@ export default function App() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [laneMap, setLaneMap] = useState<Record<string, string>>({});
   const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState<boolean>(false);
-  const [isTemplatesAndSamplesOpen, setIsTemplatesAndSamplesOpen] = useState<boolean>(false);
+  const [isTemplateSheetOpen, setIsTemplateSheetOpen] = useState<boolean>(false);
   const [isLaneMappingOpen, setIsLaneMappingOpen] = useState<boolean>(false);
-  const [isStepBuilderOpen, setIsStepBuilderOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Layout View States
@@ -106,6 +109,7 @@ export default function App() {
   const [rowErrors, setRowErrors] = useState<RowValidationErrorItem[]>([]);
   const [conversionMeta, setConversionMeta] = useState<any>(null);
   const [bulkExport, setBulkExport] = useState<BulkExportData | undefined>(undefined);
+  const [importInfo, setImportInfo] = useState<ImportInfo | undefined>(undefined);
 
   // LLM Engine Settings
   // Empty values mean "use the server's .env configuration". Only what the user
@@ -140,7 +144,7 @@ export default function App() {
       .catch((err) => console.error('Failed to load templates:', err));
   };
 
-  // Initial mount: load config, profiles, templates, samples
+  // Initial mount: load config, profiles and templates. Nothing is preloaded onto the canvas.
   useEffect(() => {
     fetchServerConfig();
 
@@ -149,30 +153,15 @@ export default function App() {
       .then((data) => {
         if (data.profiles && data.profiles.length > 0) {
           setProfiles(data.profiles);
+          // Fall back to the first target the server offers if the default is not among them.
+          if (!data.profiles.some((p: ProfileMetadata) => p.id === DEFAULT_PROFILE_ID)) {
+            setSelectedProfileId(data.profiles[0].id);
+          }
         }
       })
       .catch((err) => console.error('Failed to load profiles:', err));
 
     fetchTemplates();
-
-    fetch('/api/samples')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.samples && data.samples.length > 0) {
-          setSamples(data.samples);
-          const defaultSample =
-            data.samples.find((s: SampleFile) => s.name.includes('sample_sop.md')) ||
-            data.samples.find((s: SampleFile) => s.name.includes('sop')) ||
-            data.samples[0];
-          // Preload the text so the person can read it, but never call the model on page load.
-          if (defaultSample?.content) {
-            setInputText(defaultSample.content);
-            setFilename(defaultSample.name);
-            setFileSize(new Blob([defaultSample.content]).size);
-          }
-        }
-      })
-      .catch((err) => console.error('Failed to load samples:', err));
   }, []);
 
   /** Surfaces an API failure (sidebar card, toast, row errors) and throws a HandledApiError. */
@@ -207,6 +196,7 @@ export default function App() {
     setValidationIssues(data.validation_issues || []);
     setConversionMeta(data.metadata);
     setBulkExport(data.bulk_export);
+    setImportInfo(data.import_info);
     if (data.template_info?.lane_map) {
       setLaneMap((prev) => ({ ...prev, ...data.template_info?.lane_map }));
     }
@@ -269,34 +259,63 @@ export default function App() {
     }
   };
 
-  const handleSelectSample = async (sample: SampleFile) => {
-    if (sample.content && sample.content.trim()) {
-      setInputText(sample.content);
-      setFilename(sample.name);
-      setFileSize(new Blob([sample.content]).size);
-      convertProcess(sample.content, sample.name, selectedProfileId, selectedTemplateId, laneMap);
-    } else if (sample.download_url) {
-      setLoading(true);
-      setSidebarError(null);
-      setFilename(sample.name);
-      try {
-        const res = await fetch(sample.download_url);
-        if (!res.ok) throw new Error(`Failed to download sample file ${sample.name}`);
-        const blob = await res.blob();
-        setFileSize(blob.size);
-        const file = new File([blob], sample.name, { type: blob.type || 'application/octet-stream' });
-        await handleFileUpload(file);
-      } catch (err) {
-        showUnexpectedError(err);
-        setLoading(false);
+  /** Converts an uploaded file. Resolves to true on success so callers (Step Builder) can decide whether to close. */
+  /**
+   * Imports a BPMN file exported from another tool. Deterministic — no model call — and the
+   * diagram keeps the coordinates the source file carried.
+   */
+  const importBpmnFile = async (file: File): Promise<boolean> => {
+    setLoading(true);
+    setSidebarError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (selectedProfileId) formData.append('profile', selectedProfileId);
+      if (selectedTemplateId) formData.append('template_id', selectedTemplateId);
+
+      const res = await fetch('/api/import/bpmn', { method: 'POST', body: formData });
+      if (!res.ok) {
+        await handleFailedResponse(res);
       }
+      const data: ConversionResponse = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Import failed');
+      }
+      applyConversionResult(data);
+      setInputText('');
+      setNormalizedText('');
+
+      const info = data.import_info;
+      if (info) {
+        const strippedCount = info.stripped_namespaces.length + info.stripped_extensions.length;
+        const vendorLabel = info.source_vendor === 'generic' ? 'BPMN 2.0' : info.source_vendor;
+        setToast({
+          id: String(Date.now()),
+          type: 'success',
+          title: `Imported from ${vendorLabel}`,
+          message:
+            `${info.element_count} elements, ${info.flow_count} flows` +
+            (strippedCount > 0 ? ` · ${strippedCount} vendor extension(s) stripped` : '') +
+            (info.original_layout ? ' · original layout kept' : ' · auto-layout applied'),
+        });
+      }
+      return true;
+    } catch (err) {
+      showUnexpectedError(err);
+      return false;
+    } finally {
+      setLoading(false);
     }
   };
 
-  /** Converts an uploaded file. Resolves to true on success so callers (Step Builder) can decide whether to close. */
   const handleFileUpload = async (file: File): Promise<boolean> => {
     setFilename(file.name);
     setFileSize(file.size);
+
+    if (isBpmnFile(file.name)) {
+      return importBpmnFile(file);
+    }
+
     setLoading(true);
     setSidebarError(null);
 
@@ -387,6 +406,12 @@ export default function App() {
     }
   };
 
+  /** Discards imported coordinates: /api/render always lays the diagram out from scratch. */
+  const handleRelayout = () => {
+    setImportInfo((prev) => (prev ? { ...prev, original_layout: false } : prev));
+    rerenderFromIr(selectedProfileId, selectedTemplateId, laneMap);
+  };
+
   const handleProfileChange = (newProfileId: string) => {
     setSelectedProfileId(newProfileId);
     rerenderFromIr(newProfileId, selectedTemplateId, laneMap);
@@ -460,10 +485,9 @@ export default function App() {
         selectedTemplateId={selectedTemplateId}
         onSelectTemplate={handleTemplateChange}
         onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
-        onOpenTemplatesAndSamples={() => setIsTemplatesAndSamplesOpen(true)}
+        onOpenTemplate={() => setIsTemplateSheetOpen(true)}
         onOpenLaneMapping={() => setIsLaneMappingOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenStepBuilder={() => setIsStepBuilderOpen(true)}
         activeModelLabel={
           settings.provider
             ? `${settings.provider === 'mock' ? 'Rule engine' : settings.provider}${settings.model ? ' · ' + settings.model : ''}`
@@ -499,8 +523,6 @@ export default function App() {
           fileName={filename}
           fileSize={fileSize}
           onFileUpload={handleFileUpload}
-          samples={samples}
-          onSelectSample={handleSelectSample}
           onConvert={() =>
             convertProcess(inputText, filename, selectedProfileId, selectedTemplateId, laneMap)
           }
@@ -541,6 +563,8 @@ export default function App() {
                   laneCount={conversionMeta?.lane_count || processIr?.pools?.reduce((acc, p) => acc + p.lanes.length, 0) || 1}
                   extractionMode={conversionMeta?.extraction?.mode}
                   issuesCount={totalIssuesCount}
+                  canRelayout={Boolean(importInfo?.original_layout)}
+                  onRelayout={handleRelayout}
                   onOpenIssues={() => {
                     setIsInspectorOpen(true);
                     setInspectorTab('issues');
@@ -554,9 +578,7 @@ export default function App() {
             ) : (
               <EmptyState
                 onFileUpload={handleFileUpload}
-                samples={samples}
-                onSelectSample={handleSelectSample}
-                onOpenTemplatesAndSamples={() => setIsTemplatesAndSamplesOpen(true)}
+                onOpenTemplate={() => setIsTemplateSheetOpen(true)}
               />
             )}
           </div>
@@ -572,6 +594,7 @@ export default function App() {
           processIr={processIr}
           validationIssues={validationIssues}
           rowErrors={rowErrors}
+          importInfo={importInfo}
           lintResult={lintResult}
           exportBlocked={exportBlocked}
           sourceText={normalizedText || inputText}
@@ -584,14 +607,10 @@ export default function App() {
       </div>
 
       {/* 3. Slide-over Sheets */}
-      <TemplatesAndSamplesSheet
-        isOpen={isTemplatesAndSamplesOpen}
-        onClose={() => setIsTemplatesAndSamplesOpen(false)}
-        samples={samples}
-        onSelectSample={handleSelectSample}
-        onOpenStepBuilder={() => setIsStepBuilderOpen(true)}
+      <TemplateSheet
+        isOpen={isTemplateSheetOpen}
+        onClose={() => setIsTemplateSheetOpen(false)}
         onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
-        currentFilename={filename}
       />
 
       <SettingsSheet
@@ -603,16 +622,6 @@ export default function App() {
           setSettings(next);
           setSidebarError(null);
         }}
-      />
-
-      <StepBuilderSheet
-        isOpen={isStepBuilderOpen}
-        onClose={() => setIsStepBuilderOpen(false)}
-        onConvertToDiagram={handleFileUpload}
-        rowErrors={rowErrors}
-        onNotify={(title, message) =>
-          setToast({ id: String(Date.now()), type: 'error', title, message })
-        }
       />
 
       <TemplateManagerSheet

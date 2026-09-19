@@ -1,7 +1,7 @@
 """
 Template Local Storage Manager.
 Handles saving, listing, reading, and deleting templates under data/templates/<template_id>/.
-Includes default reference templates for Camunda, Signavio, ARIS, and Celonis.
+Ships one built-in reference template (Celonis); users upload their own for other tools.
 """
 
 from __future__ import annotations
@@ -24,138 +24,7 @@ from backend.identity import safe_identifier, slugify, LOCAL_USER
 _DEFAULT_STORAGE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "templates"
 
 
-# Pre-packaged BPMN templates for the 4 target tools
-CAMUNDA_SAMPLE_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
-                  id="Definitions_Camunda_Template"
-                  targetNamespace="http://bpmn.io/schema/bpmn"
-                  exporter="Camunda Modeler"
-                  exporterVersion="5.20.0">
-  <bpmn:collaboration id="Collaboration_Camunda_Template">
-    <bpmn:participant id="Participant_Camunda" name="Camunda Standard Enterprise Process" processRef="Process_Camunda_Template"/>
-  </bpmn:collaboration>
-  <bpmn:process id="Process_Camunda_Template" isExecutable="true">
-    <bpmn:laneSet id="LaneSet_Camunda">
-      <bpmn:lane id="Lane_Initiator" name="Initiator">
-        <bpmn:flowNodeRef>Event_Start_Fixed</bpmn:flowNodeRef>
-      </bpmn:lane>
-      <bpmn:lane id="Lane_Approver" name="Approver"/>
-      <bpmn:lane id="Lane_System" name="Automated Service"/>
-    </bpmn:laneSet>
-    <bpmn:startEvent id="Event_Start_Fixed" name="Case Opened">
-      <bpmn:outgoing>Flow_Start_Init</bpmn:outgoing>
-    </bpmn:startEvent>
-  </bpmn:process>
-  <bpmndi:BPMNDiagram id="BPMNDiagram_Camunda">
-    <bpmndi:BPMNPlane id="BPMNPlane_Camunda" bpmnElement="Collaboration_Camunda_Template">
-      <bpmndi:BPMNShape id="Shape_Participant_Camunda" bpmnElement="Participant_Camunda" isHorizontal="true">
-        <dc:Bounds x="120" y="80" width="1300" height="540"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Initiator" bpmnElement="Lane_Initiator" isHorizontal="true">
-        <dc:Bounds x="150" y="80" width="1270" height="180"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Approver" bpmnElement="Lane_Approver" isHorizontal="true">
-        <dc:Bounds x="150" y="260" width="1270" height="180"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_System" bpmnElement="Lane_System" isHorizontal="true">
-        <dc:Bounds x="150" y="440" width="1270" height="180"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Event_Start_Fixed" bpmnElement="Event_Start_Fixed">
-        <dc:Bounds x="210" y="152" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
-</bpmn:definitions>
-"""
-
-SIGNAVIO_SAMPLE_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-                  xmlns:signavio="http://www.signavio.com"
-                  id="Definitions_Signavio_Template"
-                  targetNamespace="http://www.signavio.com/bpmn20"
-                  exporter="Signavio Process Editor"
-                  exporterVersion="14.3.0">
-  <bpmn:collaboration id="Collaboration_Signavio_Template">
-    <bpmn:participant id="Participant_Signavio" name="Signavio Corporate Process" processRef="Process_Signavio_Template"/>
-  </bpmn:collaboration>
-  <bpmn:process id="Process_Signavio_Template" isExecutable="false">
-    <bpmn:laneSet id="LaneSet_Signavio">
-      <bpmn:lane id="Lane_Customer_Service" name="Customer Service">
-        <bpmn:flowNodeRef>Event_Customer_Call</bpmn:flowNodeRef>
-      </bpmn:lane>
-      <bpmn:lane id="Lane_Operations" name="Operations"/>
-      <bpmn:lane id="Lane_Finance" name="Finance"/>
-    </bpmn:laneSet>
-    <bpmn:startEvent id="Event_Customer_Call" name="Customer Inquiry Received"/>
-  </bpmn:process>
-  <bpmndi:BPMNDiagram id="BPMNDiagram_Signavio">
-    <bpmndi:BPMNPlane id="BPMNPlane_Signavio" bpmnElement="Collaboration_Signavio_Template">
-      <bpmndi:BPMNShape id="Shape_Participant_Signavio" bpmnElement="Participant_Signavio" isHorizontal="true">
-        <dc:Bounds x="120" y="80" width="1350" height="540"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_CS" bpmnElement="Lane_Customer_Service" isHorizontal="true">
-        <dc:Bounds x="150" y="80" width="1320" height="180"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Ops" bpmnElement="Lane_Operations" isHorizontal="true">
-        <dc:Bounds x="150" y="260" width="1320" height="180"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_Fin" bpmnElement="Lane_Finance" isHorizontal="true">
-        <dc:Bounds x="150" y="440" width="1320" height="180"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Event_Call" bpmnElement="Event_Customer_Call">
-        <dc:Bounds x="210" y="152" width="30" height="30"/>
-      </bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
-</bpmn:definitions>
-"""
-
-ARIS_SAMPLE_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
-                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
-                  xmlns:aris="http://www.ids-scheer.com/aris"
-                  id="Definitions_ARIS_Template"
-                  targetNamespace="http://www.ids-scheer.com/aris"
-                  exporter="ARIS Architect"
-                  exporterVersion="10.0">
-  <bpmn:collaboration id="Collaboration_ARIS">
-    <bpmn:participant id="Participant_ARIS" name="ARIS Enterprise Framework" processRef="Process_ARIS"/>
-  </bpmn:collaboration>
-  <bpmn:process id="Process_ARIS" isExecutable="false">
-    <bpmn:laneSet id="LaneSet_ARIS">
-      <bpmn:lane id="Lane_Requestor" name="Requester"/>
-      <bpmn:lane id="Lane_Fulfillment" name="Fulfillment Team"/>
-      <bpmn:lane id="Lane_Auditing" name="Compliance and Audit"/>
-    </bpmn:laneSet>
-  </bpmn:process>
-  <bpmndi:BPMNDiagram id="BPMNDiagram_ARIS">
-    <bpmndi:BPMNPlane id="BPMNPlane_ARIS" bpmnElement="Collaboration_ARIS">
-      <bpmndi:BPMNShape id="Shape_Participant_ARIS" bpmnElement="Participant_ARIS" isHorizontal="true">
-        <dc:Bounds x="100" y="80" width="1300" height="540"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_ARIS_1" bpmnElement="Lane_Requestor" isHorizontal="true">
-        <dc:Bounds x="130" y="80" width="1270" height="180"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_ARIS_2" bpmnElement="Lane_Fulfillment" isHorizontal="true">
-        <dc:Bounds x="130" y="260" width="1270" height="180"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_Lane_ARIS_3" bpmnElement="Lane_Auditing" isHorizontal="true">
-        <dc:Bounds x="130" y="440" width="1270" height="180"/>
-      </bpmndi:BPMNShape>
-    </bpmndi:BPMNPlane>
-  </bpmndi:BPMNDiagram>
-</bpmn:definitions>
-"""
-
+# Built-in reference template (scope v2: Celonis is the only bundled vendor template)
 CELONIS_SAMPLE_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
@@ -263,12 +132,23 @@ class TemplateStorage:
         except Exception:
             return None
 
+    # Built-in templates that shipped before scope v2 and are no longer supported.
+    RETIRED_BUILTINS = ("default_camunda", "default_signavio", "default_aris")
+
+    def _prune_retired_builtins(self):
+        """Removes built-in vendor templates dropped in scope v2 from existing installs."""
+        for tid in self.RETIRED_BUILTINS:
+            folder = self.root_dir / tid
+            if not folder.exists():
+                continue
+            meta = self._read_meta(folder)
+            if meta is None or meta.is_builtin:
+                shutil.rmtree(folder, ignore_errors=True)
+
     def _ensure_defaults(self):
         """Initializes built-in templates if not already present."""
+        self._prune_retired_builtins()
         defaults = [
-            ("default_camunda", "Camunda 8 Reference Template", "camunda", CAMUNDA_SAMPLE_BPMN),
-            ("default_signavio", "SAP Signavio Standard Template", "signavio", SIGNAVIO_SAMPLE_BPMN),
-            ("default_aris", "ARIS Process Governance Template", "aris", ARIS_SAMPLE_BPMN),
             ("default_celonis", "Celonis EMS Execution Template", "celonis", CELONIS_SAMPLE_BPMN),
         ]
         for tid, name, vendor, xml_content in defaults:
@@ -279,7 +159,7 @@ class TemplateStorage:
                     name=name,
                     xml_content=xml_content,
                     filename=f"{tid}.bpmn",
-                    is_default=(tid == "default_camunda"),
+                    is_default=(tid == "default_celonis"),
                     is_builtin=True,
                 )
             else:

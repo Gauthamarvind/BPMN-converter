@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Headless validation of BPMN 2.0 XML files using bpmn-moddle.
- * Verifies that all golden tests and sample BPMN diagrams parse without
+ * Verifies that all golden tests and BPMN test fixtures parse without
  * any syntax errors, schema violations, or import warnings.
  */
 
@@ -51,15 +51,15 @@ async function validateBpmnFile(filePath) {
 
 async function main() {
   const goldenDir = path.join(ROOT_DIR, 'backend', 'tests', 'golden');
-  const samplesDir = path.join(ROOT_DIR, 'samples');
+  const fixturesDir = path.join(ROOT_DIR, 'backend', 'tests', 'fixtures');
 
   const goldenFiles = findBpmnFiles(goldenDir);
-  const sampleFiles = findBpmnFiles(samplesDir);
+  const fixtureFiles = findBpmnFiles(fixturesDir);
 
-  const allFiles = [...goldenFiles, ...sampleFiles];
+  const allFiles = [...goldenFiles, ...fixtureFiles];
 
   if (allFiles.length === 0) {
-    console.error('Error: No BPMN files found in backend/tests/golden/ or samples/');
+    console.error('Error: No BPMN files found in backend/tests/golden/ or backend/tests/fixtures/');
     process.exit(1);
   }
 

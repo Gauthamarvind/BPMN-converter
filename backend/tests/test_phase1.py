@@ -143,10 +143,10 @@ class TestPhase1(unittest.TestCase):
         linter = ProfileLinter()
         profiles = linter.list_available_profiles()
         self.assertIn("generic", profiles)
-        self.assertIn("signavio", profiles)
-        self.assertIn("camunda", profiles)
+        self.assertIn("celonis", profiles)
+        self.assertEqual(sorted(profiles), ["celonis", "generic"])
 
-        result = linter.lint(self.ir, profile_name="signavio")
+        result = linter.lint(self.ir, profile_name="celonis")
         self.assertTrue(result.is_valid)
         self.assertGreater(len(result.assumptions), 0)
 

@@ -80,23 +80,11 @@ export interface ProfileMetadata {
   id: string;
   name: string;
   displayName: string;
-  /** Short label for the toolbar (e.g. "Signavio"); falls back to displayName. */
+  /** Short label for the toolbar (e.g. "Celonis"); falls back to displayName. */
   shortName?: string;
   description: string;
   assumptions: string[];
   targetVendor: string;
-}
-
-export interface SampleFile {
-  name: string;
-  filename?: string;
-  title: string;
-  description?: string;
-  type?: string;
-  extension: string;
-  download_url?: string;
-  size?: number;
-  content?: string;
 }
 
 export interface TemplateRecord {
@@ -146,6 +134,20 @@ export interface BulkExportData {
   available_formats: string[];
 }
 
+/** What the BPMN importer found and had to change. Present only on an imported diagram. */
+export interface ImportInfo {
+  source_vendor: string;
+  exporter?: string;
+  original_layout: boolean;
+  element_count: number;
+  flow_count: number;
+  pool_count: number;
+  lane_count: number;
+  stripped_namespaces: string[];
+  stripped_extensions: string[];
+  warnings: string[];
+}
+
 export interface ConversionResponse {
   success: boolean;
   export_blocked?: boolean;
@@ -160,6 +162,7 @@ export interface ConversionResponse {
     lane_map: Record<string, string>;
   };
   bulk_export?: BulkExportData;
+  import_info?: ImportInfo;
   metadata: {
     filename: string;
     process_name: string;
@@ -171,25 +174,10 @@ export interface ConversionResponse {
       mode: string;
       tokens_used: number;
     };
+    source_vendor?: string;
   };
   normalized_text: string;
   error?: string;
-}
-
-export interface StepBuilderRow {
-  step_id: string;
-  step: string;
-  responsible: string;
-  type: 'Task' | 'Decision' | 'End';
-  if_yes?: string;
-  if_no?: string;
-  parallel_group?: string;
-  next_step?: string;
-  description?: string;
-  system?: string;
-  input_data?: string;
-  output_data?: string;
-  duration?: string;
 }
 
 export interface RowValidationErrorItem {

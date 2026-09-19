@@ -19,10 +19,11 @@ from backend.llm.factory import get_llm_provider
 from backend.llm.errors import LLMError
 from backend.pipeline.chunker import ProcessExtractor
 from backend.pipeline.validator import ProcessValidator
-from backend.pipeline.layout import SugiyamaLayoutEngine
+from backend.pipeline.layout import SugiyamaLayoutEngine, DiagramLayout, EdgeLayout, Waypoint
 from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import validate_bpmn, BpmnSchemaError
 from backend.pipeline.linter import ProfileLinter
+from backend.pipeline.profiles import DEFAULT_PROFILE, SUPPORTED_PROFILES
 from backend.pipeline.mock_extractor import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
 from backend.templates.doc_parser import DocTemplateParser
@@ -52,7 +53,7 @@ class ExportBlockedError(Exception):
 def process_pipeline(
     raw_content: bytes,
     filename: str,
-    profile_name: str = "generic",
+    profile_name: str = DEFAULT_PROFILE,
     mock: bool = False,
     provider_name: Optional[str] = None,
     model: Optional[str] = None,
@@ -69,7 +70,7 @@ def process_pipeline(
     Args:
         raw_content: Input file or text bytes.
         filename: Name of the input document (determines parser & title).
-        profile_name: Target BPMN vendor profile ('generic', 'camunda', 'signavio', 'celonis', 'aris').
+        profile_name: Target export profile ('celonis' — the default — or 'generic').
         mock: When True, uses deterministic rule-based mock extraction without calling LLM.
         provider_name: LLM provider override ('openai_compatible', 'anthropic', 'gemini').
         model: LLM model name override.
@@ -165,10 +166,25 @@ def process_pipeline(
     )
 
 
+def _straight_edge(layout: DiagramLayout, flow: Any) -> EdgeLayout:
+    """A straight connector for a flow the validator added to a preset (imported) layout."""
+    src = layout.nodes.get(flow.sourceId)
+    tgt = layout.nodes.get(flow.targetId)
+    if not src or not tgt:
+        return EdgeLayout(flow_id=flow.id, waypoints=[Waypoint(x=0.0, y=0.0), Waypoint(x=0.0, y=0.0)])
+    return EdgeLayout(
+        flow_id=flow.id,
+        waypoints=[
+            Waypoint(x=src.bounds.x + src.bounds.width, y=src.bounds.y + src.bounds.height / 2),
+            Waypoint(x=tgt.bounds.x, y=tgt.bounds.y + tgt.bounds.height / 2),
+        ],
+    )
+
+
 def render_ir(
     ir: ProcessIR,
     filename: str = "process.bpmn",
-    profile_name: str = "generic",
+    profile_name: str = DEFAULT_PROFILE,
     mock: bool = False,
     template_id: Optional[str] = None,
     lane_map: Optional[Dict[str, str]] = None,
@@ -176,12 +192,18 @@ def render_ir(
     normalized_text: str = "",
     strict: bool = False,
     user_id: Optional[str] = None,
+    preset_layout: Optional[DiagramLayout] = None,
 ) -> Dict[str, Any]:
     """
     Stages 3-8 of the pipeline: validate/repair an existing Process IR, bind an optional
     reference template, lint against the target profile, lay out, serialize, XSD-validate.
     Used by process_pipeline() after extraction and by /api/render to switch target tools,
     templates or lane mappings without calling the model again.
+
+    ``preset_layout`` carries coordinates that already exist — the diagram interchange of an
+    imported BPMN file — so an import keeps the shape it had in the tool it came from. It is
+    ignored when a reference template is bound (the template owns the geometry) or when the
+    validator had to add elements the preset does not cover.
     """
     # 3. Deterministic Validation & Repair
     logger.info(f"[ProcessPipeline] Validating and repairing process graph...")
@@ -220,8 +242,10 @@ def render_ir(
                 templateId=template_id,
                 laneMap=lane_map or {}
             )
-            if template_spec.source_vendor in ("signavio", "camunda", "aris", "celonis"):
-                profile_name = template_spec.source_vendor
+            # A Celonis reference template pins the Celonis profile; templates exported from
+            # other tools (Camunda, Signavio, ARIS, ...) keep whatever target the caller chose.
+            if template_spec.source_vendor == "celonis":
+                profile_name = "celonis"
 
             template_info = {
                 "template_id": template_id,
@@ -245,10 +269,26 @@ def render_ir(
         ]
     }
 
-    # 6. Sugiyama Auto-Layout Engine (passes optional template constraints)
-    logger.info(f"[ProcessPipeline] Computing Sugiyama auto-layout...")
-    layout_engine = SugiyamaLayoutEngine(repaired_ir, template_spec=template_spec)
-    layout = layout_engine.compute_layout()
+    # 6. Layout: keep supplied coordinates when they cover the graph, else Sugiyama.
+    layout = None
+    if preset_layout is not None and template_spec is None:
+        missing = [e.id for e in repaired_ir.elements if e.id not in preset_layout.nodes]
+        if missing:
+            logger.info(
+                "[ProcessPipeline] Preset layout misses %s repaired element(s); using auto-layout instead.",
+                len(missing),
+            )
+        else:
+            logger.info("[ProcessPipeline] Using the supplied (imported) diagram layout.")
+            layout = preset_layout
+            for flow in repaired_ir.flows:
+                if flow.id not in layout.edges:
+                    layout.edges[flow.id] = _straight_edge(layout, flow)
+
+    if layout is None:
+        logger.info(f"[ProcessPipeline] Computing Sugiyama auto-layout...")
+        layout_engine = SugiyamaLayoutEngine(repaired_ir, template_spec=template_spec)
+        layout = layout_engine.compute_layout()
 
     # 7. BPMN 2.0 XML Serialization (TemplateRenderer or standard Serializer)
     profile_config = linter.load_profile(profile_name)
@@ -275,7 +315,7 @@ def render_ir(
         )
 
     # 8. Multi-Profile Bulk Export Metadata
-    supported_profiles = ["generic", "camunda", "signavio", "celonis", "aris"]
+    supported_profiles = list(SUPPORTED_PROFILES)
     bulk_export = {
         "process_name": repaired_ir.name or Path(filename).stem,
         "supported_profiles": supported_profiles,
@@ -313,3 +353,51 @@ def render_ir(
         },
         "normalized_text": normalized_text
     }
+
+
+def import_bpmn_pipeline(
+    raw_content: bytes,
+    filename: str = "imported.bpmn",
+    profile_name: str = DEFAULT_PROFILE,
+    relayout: bool = False,
+    template_id: Optional[str] = None,
+    lane_map: Optional[Dict[str, str]] = None,
+    strict: bool = False,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Imports a BPMN 2.0 file exported from another tool and re-exports it for the target
+    profile. Deterministic: no model is called at any point.
+
+    The source file's own coordinates are kept unless ``relayout`` is set, in which case the
+    Sugiyama engine lays the diagram out from scratch.
+    """
+    from backend.ingestion.bpmn_importer import import_bpmn_bytes
+
+    logger.info(f"[ProcessPipeline] Importing BPMN file '{filename}' (relayout={relayout})...")
+    ir, layout, report = import_bpmn_bytes(raw_content, filename=filename)
+
+    result = render_ir(
+        ir=ir,
+        filename=filename,
+        profile_name=profile_name,
+        mock=True,
+        template_id=template_id,
+        lane_map=lane_map,
+        extraction_meta={"mode": "bpmn-import", "tokens_used": 0},
+        normalized_text="",
+        strict=strict,
+        user_id=user_id,
+        preset_layout=None if relayout else layout,
+    )
+
+    report.original_layout = bool(layout) and not relayout
+    result["import_info"] = report.to_dict()
+    result["metadata"]["source_vendor"] = report.source_vendor
+    logger.info(
+        "[ProcessPipeline] Imported %s elements / %s flows from a %s file.",
+        report.element_count,
+        report.flow_count,
+        report.source_vendor,
+    )
+    return result

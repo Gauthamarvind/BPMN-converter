@@ -5,17 +5,13 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
-  BookOpen,
-  ArrowRight,
   Sparkles,
-  FileCode,
   AlertCircle,
-  FileSpreadsheet,
 } from 'lucide-react';
-import { SampleFile, UiError } from '../../types';
+import { UiError } from '../../types';
+import { ACCEPTED_EXTENSIONS } from '../../lib/files';
 import { Button } from '../ui/Button';
 import { Textarea } from '../ui/Field';
-import { Popover } from '../ui/Popover';
 
 export interface SidebarProps {
   isOpen: boolean;
@@ -25,8 +21,6 @@ export interface SidebarProps {
   fileName?: string;
   fileSize?: number;
   onFileUpload: (file: File) => void;
-  samples: SampleFile[];
-  onSelectSample: (sample: SampleFile) => void;
   onConvert: () => void;
   isLoading: boolean;
   error?: UiError | null;
@@ -42,8 +36,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   fileName,
   fileSize,
   onFileUpload,
-  samples,
-  onSelectSample,
   onConvert,
   isLoading,
   error,
@@ -95,7 +87,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
     </div>
   ) : null;
-  const [isSamplesOpen, setIsSamplesOpen] = useState(false);
 
   // Keyboard shortcut ⌘\ or Ctrl+\ to toggle sidebar
   useEffect(() => {
@@ -191,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileInputChange}
-                  accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt"
+                  accept={ACCEPTED_EXTENSIONS}
                   className="hidden"
                 />
                 <div
@@ -238,47 +229,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 {/* Raw Text Input Area */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[13px] font-medium text-[var(--text)]">
-                      Or paste process text
-                    </label>
-                    <Popover
-                      id="samples-popover-mobile"
-                      isOpen={isSamplesOpen}
-                      onClose={() => setIsSamplesOpen(false)}
-                      trigger={
-                        <button
-                          type="button"
-                          onClick={() => setIsSamplesOpen(!isSamplesOpen)}
-                          className="text-[13px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
-                        >
-                          <BookOpen className="w-3.5 h-3.5" />
-                          <span>Samples</span>
-                        </button>
-                      }
-                    >
-                      <div className="w-60 p-1.5 space-y-1 text-left">
-                        <div className="px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary-color)]">
-                          Load Sample Process
-                        </div>
-                        {samples.map((s) => (
-                          <button
-                            key={s.name}
-                            onClick={() => {
-                              onSelectSample(s);
-                              setIsSamplesOpen(false);
-                            }}
-                            className="w-full px-2.5 py-1.5 rounded-[8px] text-[13px] text-[var(--text)] hover:bg-[var(--surface-subtle)] text-left truncate transition-colors cursor-pointer"
-                          >
-                            <div className="truncate font-medium">{s.title || s.name}</div>
-                            <div className="text-[12px] text-[var(--text-secondary-color)] uppercase">
-                              .{s.extension}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </Popover>
-                  </div>
+                  <label className="text-[13px] font-medium text-[var(--text)] block mb-1.5">
+                    Or paste process text
+                  </label>
 
                   <Textarea
                     value={inputText}
@@ -378,7 +331,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="file"
               ref={fileInputRef}
               onChange={handleFileInputChange}
-              accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt"
+              accept={ACCEPTED_EXTENSIONS}
               className="hidden"
             />
             <div
@@ -425,48 +378,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Raw Text Input Area */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[13px] font-medium text-[var(--text)]">
-                  Or paste process text
-                </label>
-                {/* Samples Popover */}
-                <Popover
-                  id="samples-popover"
-                  isOpen={isSamplesOpen}
-                  onClose={() => setIsSamplesOpen(false)}
-                  trigger={
-                    <button
-                      type="button"
-                      onClick={() => setIsSamplesOpen(!isSamplesOpen)}
-                      className="text-[13px] text-[var(--accent)] hover:underline flex items-center gap-1 cursor-pointer font-medium"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                      <span>Samples</span>
-                    </button>
-                  }
-                >
-                  <div className="w-60 p-1.5 space-y-1 text-left">
-                    <div className="px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary-color)]">
-                      Load Sample Process
-                    </div>
-                    {samples.map((s) => (
-                      <button
-                        key={s.name}
-                        onClick={() => {
-                          onSelectSample(s);
-                          setIsSamplesOpen(false);
-                        }}
-                        className="w-full px-2.5 py-1.5 rounded-[8px] text-[13px] text-[var(--text)] hover:bg-[var(--surface-subtle)] text-left truncate transition-colors cursor-pointer"
-                      >
-                        <div className="truncate font-medium">{s.title || s.name}</div>
-                        <div className="text-[12px] text-[var(--text-secondary-color)] uppercase">
-                          .{s.extension}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </Popover>
-              </div>
+              <label className="text-[13px] font-medium text-[var(--text)] block mb-1.5">
+                Or paste process text
+              </label>
 
               <Textarea
                 value={inputText}

@@ -40,7 +40,6 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy backend code, templates, schemas, and assets
 COPY backend/ ./backend/
 COPY templates/ ./templates/
-COPY samples/ ./samples/
 COPY profiles/ ./profiles/
 COPY prompts/ ./prompts/
 COPY data/ ./data/

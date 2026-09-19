@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings as SettingsIcon, Layers, Download, Check, GitMerge, ChevronDown, Table, BookOpen, Cpu } from 'lucide-react';
+import { Settings as SettingsIcon, Layers, Download, Check, GitMerge, ChevronDown, BookOpen, Cpu } from 'lucide-react';
 import { ProfileMetadata, TemplateRecord } from '../../types';
 import { Button } from '../ui/Button';
 import { SegmentedControl, SegmentedOption } from '../ui/SegmentedControl';
@@ -14,10 +14,9 @@ export interface ToolbarProps {
   selectedTemplateId: string;
   onSelectTemplate: (templateId: string) => void;
   onOpenTemplateManager: () => void;
-  onOpenTemplatesAndSamples?: () => void;
+  onOpenTemplate?: () => void;
   onOpenLaneMapping: () => void;
   onOpenSettings: () => void;
-  onOpenStepBuilder?: () => void;
   onExportBpmn: () => void;
   onExportSvg: () => void;
   onExportPng: () => void;
@@ -39,10 +38,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   selectedTemplateId,
   onSelectTemplate,
   onOpenTemplateManager,
-  onOpenTemplatesAndSamples,
+  onOpenTemplate,
   onOpenLaneMapping,
   onOpenSettings,
-  onOpenStepBuilder,
   onExportBpmn,
   onExportSvg,
   onExportPng,
@@ -56,12 +54,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
-  // Profile options for SegmentedControl
-  // Short labels keep the control readable; the full vendor name is in the tooltip.
-  const profileOptions: SegmentedOption[] = profiles.map((p) => ({
-    id: p.id,
-    label: p.shortName || p.displayName || p.name,
-  }));
+  // Export target options for SegmentedControl.
+  // Short labels keep the control readable; the full name is in the tooltip.
+  // Celonis is the default target and is always shown first.
+  const TARGET_ORDER = ['celonis', 'generic'];
+  const profileOptions: SegmentedOption[] = [...profiles]
+    .sort((a, b) => {
+      const ai = TARGET_ORDER.indexOf(a.id);
+      const bi = TARGET_ORDER.indexOf(b.id);
+      return (ai === -1 ? TARGET_ORDER.length : ai) - (bi === -1 ? TARGET_ORDER.length : bi);
+    })
+    .map((p) => ({
+      id: p.id,
+      label: p.shortName || p.displayName || p.name,
+    }));
 
   const modelDot = {
     ready: 'bg-[var(--success)]',
@@ -91,7 +97,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       {profileOptions.length > 0 && (
         <div
           className="hidden md:flex items-center"
-          title={profiles.find((p) => p.id === selectedProfileId)?.displayName || 'Target tool'}
+          title={profiles.find((p) => p.id === selectedProfileId)?.displayName || 'Export target'}
         >
           <SegmentedControl
             id="toolbar-profile-selector"
@@ -208,33 +214,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </div>
         </Popover>
 
-        {/* Templates & Samples Action */}
-        {onOpenTemplatesAndSamples && (
+        {/* Process capture template */}
+        {onOpenTemplate && (
           <Button
-            id="toolbar-templates-samples-btn"
+            id="toolbar-template-btn"
             variant="ghost"
             size="md"
             icon={<BookOpen className="w-4 h-4 text-[var(--text-secondary-color)]" />}
-            onClick={onOpenTemplatesAndSamples}
-            title="Templates & sample workflows"
+            onClick={onOpenTemplate}
+            title="Process capture template"
           >
-            <span className="hidden xl:inline">Templates &amp; samples</span>
-            <span className="xl:hidden">Samples</span>
-          </Button>
-        )}
-
-        {/* Step Builder (No-Code Process Capture) */}
-        {onOpenStepBuilder && (
-          <Button
-            id="step-builder-open-btn"
-            variant="ghost"
-            size="md"
-            icon={<Table className="w-4 h-4 text-[var(--text-secondary-color)]" />}
-            onClick={onOpenStepBuilder}
-            title="Step Builder — capture a process as a simple step list"
-          >
-            <span className="hidden xl:inline">Step Builder</span>
-            <span className="xl:hidden">Steps</span>
+            <span className="hidden xl:inline">Template</span>
+            <span className="xl:hidden">Form</span>
           </Button>
         )}
 

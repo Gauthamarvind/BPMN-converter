@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "process2bpmn",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,34 +8,36 @@
     "clean": "rm -rf dist",
     "lint:design": "node scripts/lint-design.mjs",
     "lint": "node scripts/lint-design.mjs && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "build": "node scripts/lint-design.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/file-saver": "^2.0.7",
-    "@types/jszip": "^3.4.1",
     "@vitejs/plugin-react": "^6.1.1",
     "bpmn-js": "^18.28.0",
-    "dotenv": "^17.2.3",
     "file-saver": "^2.0.5",
-    "jszip": "^3.10.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^8.3.0",
-    "yaml": "^2.9.1"
+    "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "autoprefixer": "^10.4.21",
     "bpmn-moddle": "^10.2.0",
-    "esbuild": "^0.28.2",
+    "jsdom": "^25.0.1",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.21.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^2.1.8"
   }
 }

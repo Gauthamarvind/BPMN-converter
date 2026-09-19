@@ -11,7 +11,7 @@ import {
   Info,
   ExternalLink,
 } from 'lucide-react';
-import { FlowNode, ValidationIssue, LintResult, ProcessIR, RowValidationErrorItem } from '../../types';
+import { FlowNode, ValidationIssue, LintResult, ProcessIR, RowValidationErrorItem, ImportInfo } from '../../types';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -30,6 +30,8 @@ export interface InspectorProps {
   isBottomSheet?: boolean;
   exportBlocked?: boolean;
   rowErrors?: RowValidationErrorItem[];
+  /** Set when the diagram came from a BPMN file imported from another tool. */
+  importInfo?: ImportInfo;
   onApplyRowFix?: (fixItem: RowValidationErrorItem) => void;
 }
 
@@ -47,6 +49,7 @@ export const Inspector: React.FC<InspectorProps> = ({
   isBottomSheet = false,
   exportBlocked = false,
   rowErrors = [],
+  importInfo,
   onApplyRowFix,
 }) => {
   const highlightRef = useRef<HTMLDivElement>(null);
@@ -256,6 +259,42 @@ export const Inspector: React.FC<InspectorProps> = ({
                   Critical graph errors (such as unreachable steps or unlabeled decision branches) must be resolved before exporting.
                 </p>
               </div>
+            </div>
+          )}
+
+          {importInfo && (
+            <div className="p-3 bg-[var(--surface-subtle)] border border-[var(--separator)] rounded-[8px] space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[var(--accent)]">
+                <Info className="w-3.5 h-3.5" />
+                <span className="text-[12px] font-medium">
+                  Imported from {importInfo.source_vendor === 'generic' ? 'BPMN 2.0' : importInfo.source_vendor}
+                  {importInfo.exporter ? ` (${importInfo.exporter})` : ''}
+                </span>
+              </div>
+              <p className="text-[12px] text-[var(--text-secondary-color)] leading-snug">
+                {importInfo.element_count} elements, {importInfo.flow_count} flows,{' '}
+                {importInfo.lane_count} lanes ·{' '}
+                {importInfo.original_layout ? 'original layout kept' : 'laid out automatically'}
+              </p>
+              {importInfo.stripped_namespaces.length > 0 && (
+                <p className="text-[12px] text-[var(--text-secondary-color)] leading-snug">
+                  Stripped namespaces: {importInfo.stripped_namespaces.join(', ')}
+                </p>
+              )}
+              {importInfo.stripped_extensions.length > 0 && (
+                <p className="text-[12px] text-[var(--text-secondary-color)] leading-snug">
+                  Stripped extension elements: {importInfo.stripped_extensions.join(', ')}
+                </p>
+              )}
+              {importInfo.warnings.length > 0 && (
+                <ul className="space-y-0.5 pt-0.5">
+                  {importInfo.warnings.map((w, idx) => (
+                    <li key={idx} className="text-[12px] text-[var(--text)] leading-snug">
+                      • {w}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 

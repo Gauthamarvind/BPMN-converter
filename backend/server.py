@@ -49,7 +49,9 @@ from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import BpmnSchemaError, BpmnSchemaConfigurationError
 from backend.pipeline.linter import ProfileLinter
-from backend.pipeline.process_pipeline import process_pipeline, render_ir, ExportBlockedError
+from backend.pipeline.profiles import DEFAULT_PROFILE, SUPPORTED_PROFILES
+from backend.ingestion.bpmn_importer import BpmnImportError, looks_like_bpmn
+from backend.pipeline.process_pipeline import process_pipeline, render_ir, import_bpmn_pipeline, ExportBlockedError
 from backend.pipeline.xsd_validator import validate_bpmn
 from backend.security import (
     security,
@@ -68,7 +70,7 @@ from backend.templates.doc_parser import DocTemplateParser
 from backend.templates.mapper import LaneMapper
 from backend.templates.bpmn_renderer import BpmnTemplateRenderer
 from backend.templates.bpmn_parser import BpmnTemplateParser
-from backend.templates.blank_generator import generate_blank_xlsx, generate_blank_docx, build_xlsx_from_steps
+from backend.templates.blank_generator import generate_blank_xlsx, generate_blank_docx
 from backend.templates.simple_parser import RowValidationError, RowIssue
 
 logger = logging.getLogger(__name__)
@@ -202,6 +204,14 @@ async def row_validation_error_handler(request: Request, exc: RowValidationError
     )
 
 
+@app.exception_handler(BpmnImportError)
+async def bpmn_import_error_handler(request: Request, exc: BpmnImportError):
+    return JSONResponse(
+        status_code=422,
+        content={"error": str(exc), "detail": str(exc), "kind": "BpmnImportError"},
+    )
+
+
 @app.exception_handler(ExportBlockedError)
 async def export_blocked_handler(request: Request, exc: ExportBlockedError):
     return JSONResponse(
@@ -255,7 +265,7 @@ async def value_error_handler(request: Request, exc: ValueError):
 class ConvertTextRequest(BaseModel):
     text: str
     filename: Optional[str] = "process_input.txt"
-    profile: Optional[str] = "generic"
+    profile: Optional[str] = DEFAULT_PROFILE
     provider: Optional[str] = None
     model: Optional[str] = None
     base_url: Optional[str] = None
@@ -271,20 +281,14 @@ class MapLanesRequest(BaseModel):
     actors: List[str]
 
 
-class BuildTemplateRequest(BaseModel):
-    process_name: Optional[str] = "Custom Process"
-    steps: List[Dict[str, Any]] = []
-    roles: Optional[List[str]] = None
-
-
 class LintRequest(BaseModel):
     ir: Optional[Dict[str, Any]] = None
-    profile: str = "generic"
+    profile: str = DEFAULT_PROFILE
 
 
 class RenderRequest(BaseModel):
     ir: Dict[str, Any]
-    profile: str = "generic"
+    profile: str = DEFAULT_PROFILE
     template_id: Optional[str] = None
     lane_map: Optional[Dict[str, str]] = None
     filename: str = "process.bpmn"
@@ -303,7 +307,7 @@ class BulkExportRequest(BaseModel):
 
 class BpmnExportRequest(BaseModel):
     ir: Dict[str, Any]
-    profile: str = "generic"
+    profile: str = DEFAULT_PROFILE
     template_id: Optional[str] = None
     lane_map: Optional[Dict[str, str]] = None
     process_name: Optional[str] = "process"
@@ -348,6 +352,12 @@ def _convert_guarded(**kwargs):
     """Runs the pipeline inside an extraction slot so a burst of uploads cannot exhaust the server."""
     with extraction_slot:
         return process_pipeline(**kwargs)
+
+
+def _import_guarded(**kwargs):
+    """Imports inside an extraction slot: parsing a 15 MB BPMN file is not free either."""
+    with extraction_slot:
+        return import_bpmn_pipeline(**kwargs)
 
 
 def _mask(value: str) -> str:
@@ -460,7 +470,9 @@ def render_from_ir(req: RenderRequest, request: Request):
 @app.get("/api/profiles")
 def get_profiles():
     profiles_data = []
-    for p_id in linter.list_available_profiles():
+    available = set(linter.list_available_profiles())
+    ordered = [p for p in SUPPORTED_PROFILES if p in available]
+    for p_id in ordered:
         prof = linter.load_profile(p_id)
         profiles_data.append({
             "id": p_id,
@@ -472,96 +484,6 @@ def get_profiles():
             "targetVendor": prof.get("targetVendor", "")
         })
     return {"profiles": profiles_data}
-
-
-@app.get("/api/samples")
-def get_samples():
-    samples_dir = _PROJECT_ROOT / "samples"
-    samples = []
-    manifest_map = {}
-    
-    # Load manifest.json if present
-    manifest_file = samples_dir / "manifest.json"
-    if manifest_file.exists():
-        try:
-            with open(manifest_file, "r", encoding="utf-8") as mf:
-                manifest_items = json.load(mf)
-                if isinstance(manifest_items, list):
-                    for item in manifest_items:
-                        if isinstance(item, dict) and "filename" in item:
-                            manifest_map[item["filename"]] = item
-                elif isinstance(manifest_items, dict):
-                    manifest_map = manifest_items
-        except Exception as e:
-            logger.warning(f"Failed to load samples manifest.json: {e}")
-
-    binary_extensions = {".xlsx", ".xls", ".docx", ".pdf"}
-
-    if samples_dir.exists():
-        for f in sorted(samples_dir.iterdir()):
-            if f.is_file() and not f.name.endswith(".bpmn") and f.name not in ("manifest.json", "README.md"):
-                ext = f.suffix.lower()
-                meta = manifest_map.get(f.name, {})
-                title = meta.get("title") or f.stem.replace("_", " ").title()
-                desc = meta.get("description") or f"Sample process workflow ({ext})."
-                sample_type = meta.get("type") or ext.lstrip(".")
-                
-                download_url = f"/api/samples/download/{f.name}"
-                content = None
-
-                if ext not in binary_extensions:
-                    try:
-                        content = f.read_text(encoding="utf-8", errors="ignore")
-                    except Exception:
-                        content = None
-
-                sample_entry = {
-                    "name": f.name,
-                    "filename": f.name,
-                    "title": title,
-                    "description": desc,
-                    "type": sample_type,
-                    "extension": ext.lstrip("."),
-                    "download_url": download_url,
-                    "size": f.stat().st_size if f.exists() else 0,
-                }
-                if content is not None:
-                    sample_entry["content"] = content
-
-                samples.append(sample_entry)
-
-    return {"samples": samples}
-
-
-@app.get("/api/samples/download/{filename}")
-def download_sample_file(filename: str):
-    """Serves sample files for preview and direct conversion."""
-    safe_name = Path(filename).name
-    file_path = _PROJECT_ROOT / "samples" / safe_name
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Sample file not found")
-    
-    ext = file_path.suffix.lower()
-    media_type = "application/octet-stream"
-    if ext == ".xlsx":
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    elif ext == ".docx":
-        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    elif ext == ".pdf":
-        media_type = "application/pdf"
-    elif ext in (".txt", ".md"):
-        media_type = "text/plain; charset=utf-8"
-    elif ext == ".csv":
-        media_type = "text/csv; charset=utf-8"
-    elif ext == ".vtt":
-        media_type = "text/vtt; charset=utf-8"
-
-    return FileResponse(
-        str(file_path),
-        media_type=media_type,
-        filename=safe_name
-    )
-
 
 
 # =========================================================================
@@ -706,23 +628,6 @@ def download_blank_template(format_type: str, sample: bool = True):
     return download_blank_template_query(type=format_type, sample=sample)
 
 
-@app.post("/api/templates/build")
-def build_template_xlsx(req: BuildTemplateRequest):
-    """Builds and returns a formatted Excel workbook from Step Builder JSON."""
-    file_bytes = build_xlsx_from_steps(
-        process_name=req.process_name or "Custom Process",
-        steps=req.steps,
-        roles=req.roles
-    )
-    filename = f"{re.sub(r'[^a-zA-Z0-9_-]', '_', req.process_name or 'Process')}.xlsx"
-    return Response(
-        content=file_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
-
-
-
 MAX_UPLOAD_SIZE_BYTES = int(os.environ.get("MAX_UPLOAD_SIZE_BYTES", 20 * 1024 * 1024))
 
 
@@ -732,7 +637,7 @@ async def convert_document(
     file: Optional[UploadFile] = File(None),
     text: Optional[str] = Form(None),
     filename: Optional[str] = Form("process_input.txt"),
-    profile: Optional[str] = Form("generic"),
+    profile: Optional[str] = Form(DEFAULT_PROFILE),
     mock: Optional[bool] = Form(False),
     provider: Optional[str] = Form(None),
     model: Optional[str] = Form(None),
@@ -789,7 +694,7 @@ async def convert_document(
         _convert_guarded,
         raw_content=raw_content,
         filename=fname,
-        profile_name=profile or "generic",
+        profile_name=profile or DEFAULT_PROFILE,
         mock=mock or False,
         provider_name=p_name,
         model=p_model,
@@ -810,7 +715,7 @@ def convert_json_payload(req: ConvertTextRequest, request: Request):
     return _convert_guarded(
         raw_content=raw_content,
         filename=Path(req.filename or "process_input.txt").name,
-        profile_name=req.profile or "generic",
+        profile_name=req.profile or DEFAULT_PROFILE,
         mock=req.mock or False,
         provider_name=p_name,
         model=p_model,
@@ -819,6 +724,50 @@ def convert_json_payload(req: ConvertTextRequest, request: Request):
         template_id=req.template_id,
         lane_map=req.lane_map,
         strict=bool(req.strict),
+        user_id=current_user(request),
+    )
+
+
+@app.post("/api/import/bpmn")
+async def import_bpmn(
+    request: Request,
+    file: UploadFile = File(...),
+    profile: Optional[str] = Form(DEFAULT_PROFILE),
+    relayout: Optional[bool] = Form(False),
+    template_id: Optional[str] = Form(None),
+    strict: Optional[bool] = Form(False),
+):
+    """
+    Imports a BPMN 2.0 file exported from another modelling tool and returns it re-exported
+    for the target profile, in the same shape as /api/convert so the viewer, the Issues tab
+    and the export gate work unchanged.
+
+    Vendor namespaces and extension elements are dropped; the response reports what was
+    stripped and any element type that had to be approximated. No model is called.
+    """
+    _throttle(request)
+    raw_content = await file.read()
+    fname = Path(file.filename or "imported.bpmn").name
+
+    if len(raw_content) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds maximum upload size limit of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB.",
+        )
+    if not looks_like_bpmn(fname, raw_content):
+        raise HTTPException(
+            status_code=415,
+            detail="Expected a BPMN 2.0 file (.bpmn or .xml) whose contents declare a <definitions> root.",
+        )
+
+    return await run_in_threadpool(
+        _import_guarded,
+        raw_content=raw_content,
+        filename=fname,
+        profile_name=profile or DEFAULT_PROFILE,
+        relayout=bool(relayout),
+        template_id=template_id,
+        strict=bool(strict),
         user_id=current_user(request),
     )
 
@@ -839,9 +788,6 @@ def lint_process(req: LintRequest):
             for w in res.warnings
         ]
     }
-
-
-SUPPORTED_PROFILES = ["generic", "camunda", "signavio", "celonis", "aris"]
 
 
 def _serialize_profiles(ir_data: Dict[str, Any], profiles: List[str], template_id: Optional[str],

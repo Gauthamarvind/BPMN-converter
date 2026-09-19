@@ -12,42 +12,10 @@ from backend.server import app
 
 client = TestClient(app)
 
-class TestTemplatesAndSamples:
-    def test_samples_manifest_endpoint(self):
-        res = client.get("/api/samples")
-        assert res.status_code == 200
-        data = res.json()
-        assert "samples" in data
-        assert len(data["samples"]) >= 7
-
-        filenames = [s["name"] for s in data["samples"]]
-        assert "sample_leave_request.xlsx" in filenames
-        assert "sample_sop.docx" in filenames
-        assert "sample_transcript.vtt" in filenames
-        assert "sample_sop.pdf" in filenames
-
-        for s in data["samples"]:
-            assert "name" in s
-            assert "title" in s
-            assert "download_url" in s
-            assert "type" in s
-
-    def test_sample_download_endpoint(self):
-        res = client.get("/api/samples/download/sample_leave_request.xlsx")
-        assert res.status_code == 200
-        assert res.headers["content-type"] in (
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/octet-stream",
-        )
-        assert len(res.content) > 1000
-
-        # Non-existent file
-        res_404 = client.get("/api/samples/download/non_existent.xyz")
-        assert res_404.status_code == 404
-
-    def test_all_samples_convert_successfully(self):
-        samples_dir = Path("samples")
-        samples = [f for f in sorted(samples_dir.iterdir()) if f.is_file() and f.suffix in ('.xlsx', '.docx', '.vtt', '.pdf', '.md', '.txt', '.csv')]
+class TestTemplatesAndFixtures:
+    def test_all_fixture_documents_convert_successfully(self):
+        fixtures_dir = _PROJECT_ROOT / "backend" / "tests" / "fixtures"
+        samples = [f for f in sorted(fixtures_dir.iterdir()) if f.is_file() and f.suffix in ('.xlsx', '.docx', '.vtt', '.pdf', '.md', '.txt', '.csv')]
         assert len(samples) >= 7
 
         for s in samples:

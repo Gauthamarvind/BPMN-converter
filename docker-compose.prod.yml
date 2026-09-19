@@ -1,0 +1,62 @@
+# Production overlay. Use it together with the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# The app listens on 127.0.0.1 only — TLS and single sign-on are the reverse proxy's job
+# (see deploy/nginx.conf). Nothing here should be reachable from the network directly.
+services:
+  process2bpmn:
+    # Bind to loopback so the container is reachable only through the proxy on this host.
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    environment:
+      # --- identity -------------------------------------------------------------------
+      # The proxy authenticates the person and passes their identity in a header. The app
+      # never sees a password. Switch to APP_AUTH_MODE=token only for machine-to-machine use.
+      - APP_AUTH_MODE=proxy
+      - APP_AUTH_HEADER=X-Forwarded-User
+      - APP_USER_ID_HEADER=X-Forwarded-User
+
+      # --- model access ---------------------------------------------------------------
+      # The server's .env is the single source of truth for which model is used; clients
+      # cannot point the server at an endpoint of their choosing.
+      - ALLOW_CLIENT_LLM_OVERRIDES=false
+      - LLM_ALLOW_PRIVATE_BASE_URLS=false
+      # Only these hosts may ever be used as a model base URL. Add your own; keep it short.
+      - LLM_BASE_URL_ALLOWLIST=ollama.internal,api.openai.com
+
+      # --- limits ---------------------------------------------------------------------
+      - RATE_LIMIT_PER_MINUTE=30
+      - MAX_CONCURRENT_EXTRACTIONS=4
+      - EXTRACTION_QUEUE_TIMEOUT_SECONDS=30
+      - MAX_UPLOAD_SIZE_BYTES=20971520
+
+      # --- exposure -------------------------------------------------------------------
+      # /api/health stays public for the proxy's health check but must not leak the model
+      # base URL or key hint on a shared deployment.
+      - EXPOSE_SERVER_CONFIG=false
+      # The SPA is served from the same origin, so no cross-origin access is needed.
+      - CORS_ALLOW_ORIGINS=
+
+      - SINGLE_POOL=true
+      - DEFAULT_PROFILE=celonis
+      - LOG_LEVEL=info
+
+    volumes:
+      # Uploaded reference templates and per-user preferences live here. Back this up.
+      - ./data:/app/data
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

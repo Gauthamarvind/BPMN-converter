@@ -455,7 +455,9 @@ def generate_blank_docx(include_sample: bool = True) -> bytes:
 
 def build_xlsx_from_steps(process_name: str, steps: List[Dict[str, Any]], roles: Optional[List[str]] = None) -> bytes:
     """
-    Builds an identical .xlsx workbook given a JSON list of steps from the Step Builder sheet.
+    Builds a capture workbook (same layout as the downloadable template) from a list of step
+    dicts. The in-browser Step Builder that used this was removed in scope v2; the helper stays
+    for the test-suite and for scripted generation of capture files.
     """
     row_data_list = []
     for s in steps:

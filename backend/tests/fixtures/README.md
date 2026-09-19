@@ -1,6 +1,9 @@
-# Process2BPMN Sample Workflows
+# Process2BPMN Test Fixtures
 
-This directory contains ready-to-convert sample inputs in various formats (.xlsx, .docx, .vtt, .pdf, .md, .txt, .csv) demonstrating how Process2BPMN converts unstructured documents and structured spreadsheets into standard BPMN 2.0 diagrams.
+> These files are test fixtures, not a shipped feature. The bundled sample workflows were removed
+> in scope v2; the documents stay here because the round-trip and parser tests convert them.
+
+This directory contains ready-to-convert inputs in various formats (.xlsx, .docx, .vtt, .pdf, .md, .txt, .csv) demonstrating how Process2BPMN converts unstructured documents and structured spreadsheets into standard BPMN 2.0 diagrams.
 
 ---
 
