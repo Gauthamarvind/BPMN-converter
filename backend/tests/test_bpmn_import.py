@@ -81,6 +81,33 @@ class TestImporter(unittest.TestCase):
         self.assertEqual(len(layout.pools), 1)
         self.assertEqual(len(layout.pools[0].lanes), 2)
 
+    def test_collapsed_subprocess_is_one_node(self):
+        """
+        A sub-process's children belong to a nested diagram. Lifting them into the parent
+        would inject a second start and end event into the top-level graph.
+        """
+        nested = b"""<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="http://x">
+  <bpmn:process id="P1" name="With Subprocess">
+    <bpmn:startEvent id="S1" name="Start"/>
+    <bpmn:subProcess id="Sub1" name="Handle exception">
+      <bpmn:startEvent id="InnerStart" name="Inner start"/>
+      <bpmn:task id="InnerTask" name="Inner task"/>
+      <bpmn:endEvent id="InnerEnd" name="Inner end"/>
+      <bpmn:sequenceFlow id="IF1" sourceRef="InnerStart" targetRef="InnerTask"/>
+      <bpmn:sequenceFlow id="IF2" sourceRef="InnerTask" targetRef="InnerEnd"/>
+    </bpmn:subProcess>
+    <bpmn:endEvent id="E1" name="End"/>
+    <bpmn:sequenceFlow id="F1" sourceRef="S1" targetRef="Sub1"/>
+    <bpmn:sequenceFlow id="F2" sourceRef="Sub1" targetRef="E1"/>
+  </bpmn:process>
+</bpmn:definitions>"""
+        ir, _, report = import_bpmn_bytes(nested, filename="nested.bpmn")
+        self.assertEqual([e.id for e in ir.elements], ["S1", "Sub1", "E1"])
+        self.assertEqual(len(ir.flows), 2)
+        self.assertEqual(len([e for e in ir.elements if e.type == "startEvent"]), 1)
+        self.assertTrue(any("collapsed sub-process" in w for w in report.warnings))
+
     def test_rejects_non_bpmn_xml(self):
         with self.assertRaises(BpmnImportError):
             import_bpmn_bytes(b"<?xml version='1.0'?><root><a/></root>", filename="x.xml")

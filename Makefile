@@ -1,4 +1,8 @@
+<<<<<<< ours
 .PHONY: dev run test revalidate lint build schemas templates docker-build docker-run deploy-prod
+=======
+.PHONY: dev run test test-frontend test-e2e lint build schemas templates docker-build docker-run
+>>>>>>> theirs
 
 # Run Vite dev server on :3000 (proxying /api to :8000) and uvicorn on :8000
 dev:
@@ -10,10 +14,20 @@ run: build
 	@echo "Serving built application on http://localhost:8000..."
 	uvicorn backend.server:app --host 0.0.0.0 --port 8000
 
-# Run full test suite: pytest backend tests + npm design & type lint
+# Run full test suite: backend pytest, design & type lint, frontend unit tests
 test:
 	pytest -v
 	npm run lint
+	npm run test
+
+# Frontend unit tests only (Vitest)
+test-frontend:
+	npm run test
+
+# End-to-end smoke test (Playwright; builds the SPA and starts uvicorn itself)
+test-e2e: build
+	npx playwright install --with-deps chromium
+	npm run test:e2e
 
 # Re-run the free-text fixtures through the configured real model (scope v2 phase 7)
 revalidate:

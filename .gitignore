@@ -20,8 +20,15 @@ __pycache__/
 data/templates/tpl_*
 data/templates/_prefs/
 
+<<<<<<< ours
 # Real-model re-validation output (scope v2 phase 7)
 revalidation/
+=======
+# Test artefacts
+playwright-report/
+test-results/
+coverage/
+>>>>>>> theirs
 
 # OS & Editor files
 .DS_Store

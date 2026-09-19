@@ -212,6 +212,23 @@ python3 -m backend.cli profiles
 
 ---
 
+## Tests
+
+| Layer | Command | What it covers |
+| :--- | :--- | :--- |
+| Backend | `pytest -v` | Pipeline, importer, export gate, profiles, template parsing, API contract |
+| Design & types | `npm run lint` | Typography floor, design tokens, TypeScript |
+| Frontend units | `npm run test` | Toolbar targets, Template page, upload routing, re-layout control (Vitest + Testing Library) |
+| End to end | `npm run test:e2e` | Import a BPMN file, render, re-layout, export (Playwright, Chromium) |
+
+`make test` runs the first three; `make test-e2e` builds the SPA, starts uvicorn and runs the
+smoke test. CI runs all four on every push and pull request.
+
+The e2e test deliberately uses the BPMN import path: it is deterministic, so the smoke test
+cannot flake on model availability.
+
+---
+
 ## Export gate
 
 Conversion and import always return a diagram, but export (`/api/export/bpmn`, `/api/export/bulk`, the CLI) is refused while ERROR-level issues exist — unreachable steps, unlabelled decision branches, unbalanced parallel gateways, or template rows that conflict. Each exported file is XSD-validated before it is written. Fix the issues listed in the Inspector, or pass `--force` on the CLI.
@@ -258,6 +275,6 @@ Work is tracked on branch `scope-celonis-v2`.
 | 2 | Celonis as default target everywhere; empty start page; two-target toolbar | done |
 | 3 | Single Template page with one example process | done |
 | 4 | BPMN import from other tools (`/api/import/bpmn`, CLI `import`) | done |
-| 5 | Tech-stack slimming and test suite (Vitest + Playwright smoke) | planned |
+| 5 | Tech-stack slimming and test suite (Vitest + Playwright smoke) | done |
 | 6 | Manual import verification: Celonis, bpmn.io, Bizagi, Flowable; round-trips from Camunda/Signavio/ARIS exports | planned |
 | 7 | Real-model (Ollama) extraction re-validation and team deployment | planned |

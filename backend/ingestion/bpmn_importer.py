@@ -88,6 +88,9 @@ SKIPPED_TAGS = {
     "intermediateThrowEvent",
 }
 
+#: Containers whose children are a separate level of the diagram, not siblings of it.
+CONTAINER_TAGS = {"subProcess", "transaction", "adHocSubProcess"}
+
 EVENT_DEFINITION_TIMER = "timerEventDefinition"
 EVENT_DEFINITION_MESSAGE = "messageEventDefinition"
 
@@ -331,6 +334,32 @@ class BpmnImporter:
 
         return None
 
+    def _nested_ids(self, processes: List[Any]) -> set[str]:
+        """
+        Ids of everything *inside* a sub-process.
+
+        A collapsed sub-process is imported as one node; its children belong to a nested
+        diagram, and lifting them into the parent would inject a second start and end event
+        into the top-level graph. They are skipped, and the sub-process is reported so the
+        person knows the detail did not come across.
+        """
+        nested: set[str] = set()
+        for process in processes:
+            for elem in process.iter():
+                if _local(elem.tag) not in CONTAINER_TAGS:
+                    continue
+                container_id = elem.attrib.get("id", "")
+                for child in elem.iter():
+                    child_id = child.attrib.get("id", "")
+                    if child_id and child_id != container_id:
+                        nested.add(child_id)
+                if container_id:
+                    self.report.warnings.append(
+                        f"'{elem.attrib.get('name') or container_id}' is a collapsed sub-process; it was "
+                        "imported as a single step and its contents were not expanded."
+                    )
+        return nested
+
     def _lane_membership(self, processes: List[Any]) -> Dict[str, str]:
         """raw element id -> raw lane id"""
         membership: Dict[str, str] = {}
@@ -346,6 +375,7 @@ class BpmnImporter:
 
     def _extract_elements(self, processes: List[Any]) -> Tuple[List[FlowNode], Dict[str, str]]:
         membership = self._lane_membership(processes)
+        nested = self._nested_ids(processes)
         elements: List[FlowNode] = []
         lane_of_element: Dict[str, str] = {}
         seen_raw: set[str] = set()
@@ -361,6 +391,9 @@ class BpmnImporter:
                         f"'{name}' is a {tag} and was not imported — the IR has no equivalent."
                     )
                     continue
+
+                if raw_id in nested:
+                    continue  # lives inside a sub-process; not a node of this diagram
 
                 ir_type = self._resolve_type(tag, elem)
                 if ir_type is None or not raw_id or raw_id in seen_raw:
@@ -431,12 +464,15 @@ class BpmnImporter:
     def _extract_flows(self, processes: List[Any], known_ids: set[str]) -> List[SequenceFlow]:
         flows: List[SequenceFlow] = []
         seen: set[str] = set()
+        nested = self._nested_flow_ids(processes)
 
         for process in processes:
             for elem in process.iter():
                 if _local(elem.tag) != "sequenceFlow":
                     continue
                 raw_id = elem.attrib.get("id", "")
+                if raw_id in nested:
+                    continue  # an internal connector of a collapsed sub-process
                 raw_src = elem.attrib.get("sourceRef", "")
                 raw_tgt = elem.attrib.get("targetRef", "")
                 if not raw_src or not raw_tgt:
@@ -473,6 +509,19 @@ class BpmnImporter:
                     )
                 )
         return flows
+
+    @staticmethod
+    def _nested_flow_ids(processes: List[Any]) -> set[str]:
+        """Sequence-flow ids that live inside a sub-process, so they are not parent-level flows."""
+        nested: set[str] = set()
+        for process in processes:
+            for elem in process.iter():
+                if _local(elem.tag) not in CONTAINER_TAGS:
+                    continue
+                for child in elem.iter():
+                    if _local(child.tag) == "sequenceFlow" and child.attrib.get("id"):
+                        nested.add(child.attrib["id"])
+        return nested
 
     # ------------------------------------------------------------------ diagram interchange
     def _extract_layout(self, ir: ProcessIR) -> Optional[DiagramLayout]:

@@ -9,6 +9,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { UiError } from '../../types';
+import { ACCEPTED_EXTENSIONS } from '../../lib/files';
 import { Button } from '../ui/Button';
 import { Textarea } from '../ui/Field';
 
@@ -181,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileInputChange}
-                  accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt,.bpmn,.xml"
+                  accept={ACCEPTED_EXTENSIONS}
                   className="hidden"
                 />
                 <div
@@ -330,7 +331,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="file"
               ref={fileInputRef}
               onChange={handleFileInputChange}
-              accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt,.bpmn,.xml"
+              accept={ACCEPTED_EXTENSIONS}
               className="hidden"
             />
             <div

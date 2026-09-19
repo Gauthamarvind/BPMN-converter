@@ -18,5 +18,12 @@ __pycache__
 # Dynamic templates runtime store
 data/templates/tpl_*
 
+# Tests (not needed in the runtime image)
+e2e
+playwright.config.ts
+playwright-report
+test-results
+backend/tests
+
 # Local logs
 *.log

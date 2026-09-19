@@ -14,6 +14,7 @@ import {
   UiError,
 } from './types';
 import { describeApiError, describeUnexpectedError } from './lib/errors';
+import { isBpmnFile } from './lib/files';
 import { BpmnViewerComponent, BpmnViewerHandle } from './components/BpmnViewer';
 import { Toolbar } from './components/layout/Toolbar';
 import { Sidebar } from './components/layout/Sidebar';
@@ -41,11 +42,7 @@ const SETTINGS_STORAGE_KEY = 'process2bpmn.settings.v1';
 /** Scope v2 default export target. The backend defaults to the same profile. */
 const DEFAULT_PROFILE_ID = 'celonis';
 
-/** Files that go to the BPMN import path instead of the extraction pipeline. */
-const BPMN_EXTENSIONS = ['.bpmn', '.bpmn2', '.xml'];
 
-const isBpmnFile = (name: string) =>
-  BPMN_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 
 function loadStoredSettings(): LLMSettings {
   const fallback: LLMSettings = { provider: '', model: '', baseUrl: '', apiKey: '', temperature: 0.1 };

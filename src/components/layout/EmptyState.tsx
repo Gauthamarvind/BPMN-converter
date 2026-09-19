@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Upload, BookOpen, ArrowRight } from 'lucide-react';
+import { ACCEPTED_EXTENSIONS } from '../../lib/files';
 
 export interface EmptyStateProps {
   onFileUpload: (file: File) => void;
@@ -56,7 +57,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           const file = e.target.files?.[0];
           if (file) onFileUpload(file);
         }}
-        accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt,.bpmn,.xml"
+        accept={ACCEPTED_EXTENSIONS}
         className="hidden"
       />
 
