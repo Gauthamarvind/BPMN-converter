@@ -260,7 +260,7 @@ class TestTemplateStorage(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_traversal_ids_are_rejected(self):
-        for bad in ("..", "../..", "a/b", "../default_camunda"):
+        for bad in ("..", "../..", "a/b", "../default_celonis"):
             with self.assertRaises(ValueError):
                 self.storage.delete_template(bad)
             self.assertIsNone(self.storage.get_template(bad))
@@ -275,16 +275,18 @@ class TestTemplateStorage(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.storage.delete_template(meta.id, user_id="bob")
         with self.assertRaises(PermissionError):
-            self.storage.delete_template("default_camunda", user_id="alice")
+            self.storage.delete_template("default_celonis", user_id="alice")
         self.assertTrue(self.storage.delete_template(meta.id, user_id="alice"))
 
     def test_per_user_default(self):
-        self.storage.set_default("default_signavio", user_id="alice")
+        meta, _ = self.storage.save_template(MINIMAL_BPMN, "corp.bpmn", name="Corp", owner_id="alice")
+        self.storage.set_default(meta.id, user_id="alice")
         alice = {t.id: t.is_default for t in self.storage.list_templates("alice")}
         bob = {t.id: t.is_default for t in self.storage.list_templates("bob")}
-        self.assertTrue(alice["default_signavio"])
-        self.assertFalse(bob["default_signavio"])
-        self.assertTrue(bob["default_camunda"])
+        self.assertTrue(alice[meta.id])
+        self.assertFalse(alice["default_celonis"])
+        self.assertNotIn(meta.id, bob)
+        self.assertTrue(bob["default_celonis"])
 
 
 # ---------------------------------------------------------------------------
@@ -368,15 +370,15 @@ class TestApi(unittest.TestCase):
         self.assertEqual(res.status_code, 200, res.text[:300])
         zf = zipfile.ZipFile(io.BytesIO(res.content))
         names = set(zf.namelist())
-        for p in ("generic", "camunda", "signavio", "celonis", "aris"):
+        for p in ("celonis", "generic"):
             self.assertIn(f"loop_demo_{p}.bpmn", names)
         self.assertIn("loop_demo.svg", names)
         self.assertIn("manifest.json", names)
-        xmls = {p: zf.read(f"loop_demo_{p}.bpmn").decode() for p in ("generic", "camunda", "signavio", "celonis", "aris")}
-        self.assertGreater(len(set(xmls.values())), 1, "vendor profiles must not produce identical files")
+        xmls = {p: zf.read(f"loop_demo_{p}.bpmn").decode() for p in ("celonis", "generic")}
+        self.assertGreater(len(set(xmls.values())), 1, "export profiles must not produce identical files")
 
     def test_export_bpmn_single_profile(self):
-        res = self.client.post("/api/export/bpmn", json={"process_name": "Loop", "ir": _loop_ir().to_dict(), "profile": "camunda"})
+        res = self.client.post("/api/export/bpmn", json={"process_name": "Loop", "ir": _loop_ir().to_dict(), "profile": "celonis"})
         self.assertEqual(res.status_code, 200)
         self.assertIn("bpmn:definitions", res.text)
 

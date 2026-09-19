@@ -3,8 +3,8 @@
 Process2BPMN Standalone CLI.
 Converts unstructured process documents into BPMN 2.0 XML with full BPMNDI auto-layout.
 Usage:
-  process2bpmn convert input.docx --profile signavio -o out.bpmn
-  python3 -m backend.cli convert input.docx --profile camunda -o out.bpmn
+  process2bpmn convert input.docx --profile celonis -o out.bpmn
+  python3 -m backend.cli convert input.docx --profile generic -o out.bpmn
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ def main():
     convert_parser.add_argument(
         "--profile", "-p",
         default="generic",
-        choices=["generic", "signavio", "aris", "celonis", "camunda"],
+        choices=["celonis", "generic"],
         help="Target tool profile (default: generic)"
     )
     convert_parser.add_argument("--output", "-o", help="Output .bpmn file path (default: stdout)")

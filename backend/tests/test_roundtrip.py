@@ -1,6 +1,6 @@
 """
 Real round-trip integration tests for Process2BPMN.
-Uploads actual .xlsx, .docx, .pdf, and other real sample files from samples/
+Uploads actual .xlsx, .docx, .pdf, and other real files from backend/tests/fixtures/
 through /api/convert in mock mode and asserts:
 1. HTTP 200 and success response.
 2. Non-empty BPMN 2.0 XML diagram.
@@ -21,7 +21,7 @@ from backend.server import app
 from backend.pipeline.xsd_validator import validate_bpmn
 
 client = TestClient(app)
-SAMPLES_DIR = _PROJECT_ROOT / "samples"
+SAMPLES_DIR = _PROJECT_ROOT / "backend" / "tests" / "fixtures"
 
 
 class TestRoundtrip:
@@ -109,9 +109,9 @@ class TestRoundtrip:
         xsd_errors = validate_bpmn(bpmn_xml)
         assert len(xsd_errors) == 0, f"XSD validation errors on pdf conversion: {xsd_errors}"
 
-    def test_roundtrip_all_vendor_profiles_for_samples(self):
-        """Verifies that all samples convert cleanly across all export profiles."""
-        profiles = ["generic", "camunda", "signavio", "celonis", "aris"]
+    def test_roundtrip_all_export_profiles(self):
+        """Verifies that the fixture documents convert cleanly across both export profiles."""
+        profiles = ["celonis", "generic"]
         sample_files = ["sample_leave_request.xlsx", "sample_sop.docx", "sample_sop.pdf"]
 
         for fname in sample_files:

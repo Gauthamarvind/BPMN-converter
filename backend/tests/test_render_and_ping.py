@@ -21,7 +21,7 @@ class TestRenderAndPing(unittest.TestCase):
         self.client = TestClient(app)
 
     def _convert_leave_request(self) -> dict:
-        path = ROOT / "samples" / "sample_leave_request.xlsx"
+        path = ROOT / "backend" / "tests" / "fixtures" / "sample_leave_request.xlsx"
         with open(path, "rb") as fh:
             res = self.client.post(
                 "/api/convert",
@@ -35,12 +35,12 @@ class TestRenderAndPing(unittest.TestCase):
         first = self._convert_leave_request()
         res = self.client.post(
             "/api/render",
-            json={"ir": first["ir"], "profile": "aris", "filename": "sample_leave_request.xlsx"},
+            json={"ir": first["ir"], "profile": "celonis", "filename": "sample_leave_request.xlsx"},
         )
         self.assertEqual(res.status_code, 200, res.text[:300])
         data = res.json()
         self.assertTrue(data["success"])
-        self.assertEqual(data["lint_result"]["profile_name"], "aris")
+        self.assertEqual(data["lint_result"]["profile_name"], "celonis")
         self.assertIn("<bpmn:definitions", data["bpmn_xml"])
         self.assertEqual(data["metadata"]["element_count"], first["metadata"]["element_count"])
         self.assertEqual(data["metadata"]["extraction"]["mode"], "render")

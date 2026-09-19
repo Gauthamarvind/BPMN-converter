@@ -68,7 +68,7 @@ from backend.templates.doc_parser import DocTemplateParser
 from backend.templates.mapper import LaneMapper
 from backend.templates.bpmn_renderer import BpmnTemplateRenderer
 from backend.templates.bpmn_parser import BpmnTemplateParser
-from backend.templates.blank_generator import generate_blank_xlsx, generate_blank_docx, build_xlsx_from_steps
+from backend.templates.blank_generator import generate_blank_xlsx, generate_blank_docx
 from backend.templates.simple_parser import RowValidationError, RowIssue
 
 logger = logging.getLogger(__name__)
@@ -271,12 +271,6 @@ class MapLanesRequest(BaseModel):
     actors: List[str]
 
 
-class BuildTemplateRequest(BaseModel):
-    process_name: Optional[str] = "Custom Process"
-    steps: List[Dict[str, Any]] = []
-    roles: Optional[List[str]] = None
-
-
 class LintRequest(BaseModel):
     ir: Optional[Dict[str, Any]] = None
     profile: str = "generic"
@@ -474,96 +468,6 @@ def get_profiles():
     return {"profiles": profiles_data}
 
 
-@app.get("/api/samples")
-def get_samples():
-    samples_dir = _PROJECT_ROOT / "samples"
-    samples = []
-    manifest_map = {}
-    
-    # Load manifest.json if present
-    manifest_file = samples_dir / "manifest.json"
-    if manifest_file.exists():
-        try:
-            with open(manifest_file, "r", encoding="utf-8") as mf:
-                manifest_items = json.load(mf)
-                if isinstance(manifest_items, list):
-                    for item in manifest_items:
-                        if isinstance(item, dict) and "filename" in item:
-                            manifest_map[item["filename"]] = item
-                elif isinstance(manifest_items, dict):
-                    manifest_map = manifest_items
-        except Exception as e:
-            logger.warning(f"Failed to load samples manifest.json: {e}")
-
-    binary_extensions = {".xlsx", ".xls", ".docx", ".pdf"}
-
-    if samples_dir.exists():
-        for f in sorted(samples_dir.iterdir()):
-            if f.is_file() and not f.name.endswith(".bpmn") and f.name not in ("manifest.json", "README.md"):
-                ext = f.suffix.lower()
-                meta = manifest_map.get(f.name, {})
-                title = meta.get("title") or f.stem.replace("_", " ").title()
-                desc = meta.get("description") or f"Sample process workflow ({ext})."
-                sample_type = meta.get("type") or ext.lstrip(".")
-                
-                download_url = f"/api/samples/download/{f.name}"
-                content = None
-
-                if ext not in binary_extensions:
-                    try:
-                        content = f.read_text(encoding="utf-8", errors="ignore")
-                    except Exception:
-                        content = None
-
-                sample_entry = {
-                    "name": f.name,
-                    "filename": f.name,
-                    "title": title,
-                    "description": desc,
-                    "type": sample_type,
-                    "extension": ext.lstrip("."),
-                    "download_url": download_url,
-                    "size": f.stat().st_size if f.exists() else 0,
-                }
-                if content is not None:
-                    sample_entry["content"] = content
-
-                samples.append(sample_entry)
-
-    return {"samples": samples}
-
-
-@app.get("/api/samples/download/{filename}")
-def download_sample_file(filename: str):
-    """Serves sample files for preview and direct conversion."""
-    safe_name = Path(filename).name
-    file_path = _PROJECT_ROOT / "samples" / safe_name
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Sample file not found")
-    
-    ext = file_path.suffix.lower()
-    media_type = "application/octet-stream"
-    if ext == ".xlsx":
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    elif ext == ".docx":
-        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    elif ext == ".pdf":
-        media_type = "application/pdf"
-    elif ext in (".txt", ".md"):
-        media_type = "text/plain; charset=utf-8"
-    elif ext == ".csv":
-        media_type = "text/csv; charset=utf-8"
-    elif ext == ".vtt":
-        media_type = "text/vtt; charset=utf-8"
-
-    return FileResponse(
-        str(file_path),
-        media_type=media_type,
-        filename=safe_name
-    )
-
-
-
 # =========================================================================
 # TEMPLATE MANAGEMENT ENDPOINTS
 # =========================================================================
@@ -706,23 +610,6 @@ def download_blank_template(format_type: str, sample: bool = True):
     return download_blank_template_query(type=format_type, sample=sample)
 
 
-@app.post("/api/templates/build")
-def build_template_xlsx(req: BuildTemplateRequest):
-    """Builds and returns a formatted Excel workbook from Step Builder JSON."""
-    file_bytes = build_xlsx_from_steps(
-        process_name=req.process_name or "Custom Process",
-        steps=req.steps,
-        roles=req.roles
-    )
-    filename = f"{re.sub(r'[^a-zA-Z0-9_-]', '_', req.process_name or 'Process')}.xlsx"
-    return Response(
-        content=file_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
-
-
-
 MAX_UPLOAD_SIZE_BYTES = int(os.environ.get("MAX_UPLOAD_SIZE_BYTES", 20 * 1024 * 1024))
 
 
@@ -841,7 +728,7 @@ def lint_process(req: LintRequest):
     }
 
 
-SUPPORTED_PROFILES = ["generic", "camunda", "signavio", "celonis", "aris"]
+SUPPORTED_PROFILES = ["celonis", "generic"]
 
 
 def _serialize_profiles(ir_data: Dict[str, Any], profiles: List[str], template_id: Optional[str],

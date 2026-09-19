@@ -1,6 +1,6 @@
 """
 FastAPI Server Integration Tests.
-Verifies /api/health, /api/profiles, /api/samples, /api/convert, and /api/lint.
+Verifies /api/health, /api/profiles, /api/convert, and /api/lint.
 """
 
 import sys
@@ -34,20 +34,14 @@ class TestServerEndpoints(unittest.TestCase):
         profiles = res.json()["profiles"]
         ids = [p["id"] for p in profiles]
         self.assertIn("generic", ids)
-        self.assertIn("signavio", ids)
-        self.assertIn("camunda", ids)
-
-    def test_samples(self):
-        res = self.client.get("/api/samples")
-        self.assertEqual(res.status_code, 200)
-        samples = res.json()["samples"]
-        self.assertGreaterEqual(len(samples), 3)
+        self.assertIn("celonis", ids)
+        self.assertEqual(sorted(ids), ["celonis", "generic"])
 
     def test_convert_text(self):
         payload = {
             "text": "1. Customer submits purchase order.\n2. Manager reviews order.\n3. Billing system charges credit card.",
             "filename": "order_flow.txt",
-            "profile": "signavio",
+            "profile": "celonis",
             "mock": True
         }
         res = self.client.post("/api/convert-json", json=payload)
@@ -60,10 +54,10 @@ class TestServerEndpoints(unittest.TestCase):
 
     def test_lint_endpoint(self):
         payload = {
-            "profile": "signavio",
+            "profile": "celonis",
             "ir": {
                 "id": "Process_1",
-                "name": "Signavio Test",
+                "name": "Celonis Test",
                 "elements": [
                     {"id": "Start_1", "type": "startEvent", "name": "Start", "laneId": "Lane_1"},
                     {"id": "End_1", "type": "endEvent", "name": "End", "laneId": "Lane_1"}
@@ -82,7 +76,7 @@ class TestServerEndpoints(unittest.TestCase):
         payload = {
             "text": "1. Requester submits request.\n2. Approver evaluates request.\n3. Request approved.",
             "filename": "approval_flow.txt",
-            "profile": "camunda",
+            "profile": "celonis",
             "mock": True
         }
         res = self.client.post("/api/convert-json", json=payload)
@@ -95,7 +89,7 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertIn("supported_profiles", bulk)
         self.assertIn("available_formats", bulk)
         self.assertEqual(set(bulk["available_formats"]), {".bpmn", ".svg", ".png"})
-        self.assertIn("camunda", bulk["supported_profiles"])
+        self.assertEqual(sorted(bulk["supported_profiles"]), ["celonis", "generic"])
 
     def test_export_bulk_zip_endpoint(self):
         import zipfile
@@ -126,8 +120,7 @@ class TestServerEndpoints(unittest.TestCase):
         # Verify ZIP contents
         zf = zipfile.ZipFile(io.BytesIO(res.content))
         namelist = zf.namelist()
-        self.assertIn("invoice_approval_camunda.bpmn", namelist)
-        self.assertIn("invoice_approval_signavio.bpmn", namelist)
+        self.assertIn("invoice_approval_celonis.bpmn", namelist)
         self.assertIn("invoice_approval_generic.bpmn", namelist)
         self.assertIn("invoice_approval.svg", namelist)
         self.assertIn("invoice_approval.png", namelist)

@@ -249,10 +249,10 @@ Work is tracked on branch `scope-celonis-v2`.
 
 | Phase | Scope | Status |
 | :--- | :--- | :--- |
-| 0 | Branch + tag the full-scope build (`v1-full-scope`) | in progress |
-| 1 | Remove sample workflows, Step Builder, and the Signavio/Camunda/ARIS profiles | planned |
+| 0 | Branch + tag the full-scope build (`v1-full-scope`) | done |
+| 1 | Remove sample workflows, Step Builder, and the Signavio/Camunda/ARIS profiles | done |
 | 2 | Celonis as default target everywhere; empty start page; two-target toolbar | planned |
-| 3 | Single Template page with one example process | planned |
+| 3 | Single Template page with one example process | done |
 | 4 | BPMN import from other tools (`/api/import/bpmn`, CLI `import`) | planned |
 | 5 | Tech-stack slimming and test suite (Vitest + Playwright smoke) | planned |
 | 6 | Manual import verification: Celonis, bpmn.io, Bizagi, Flowable; round-trips from Camunda/Signavio/ARIS exports | planned |

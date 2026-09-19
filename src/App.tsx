@@ -3,7 +3,6 @@ import {
   ProcessIR,
   FlowNode,
   ProfileMetadata,
-  SampleFile,
   ConversionResponse,
   LintResult,
   LLMSettings,
@@ -22,9 +21,8 @@ import { FloatingControls } from './components/layout/FloatingControls';
 import { EmptyState } from './components/layout/EmptyState';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { TemplateManagerSheet } from './components/sheets/TemplateManagerSheet';
-import { TemplatesAndSamplesSheet } from './components/sheets/TemplatesAndSamplesSheet';
+import { TemplateSheet } from './components/sheets/TemplateSheet';
 import { LaneMappingSheet } from './components/sheets/LaneMappingSheet';
-import { StepBuilderSheet } from './components/sheets/StepBuilderSheet';
 import { Toast, ToastMessage } from './components/ui/Toast';
 import { RowValidationErrorItem } from './types';
 
@@ -57,11 +55,10 @@ export default function App() {
   // Core Process Inputs
   const [inputText, setInputText] = useState<string>('');
   const [normalizedText, setNormalizedText] = useState<string>('');
-  const [filename, setFilename] = useState<string>('sample_sop.md');
+  const [filename, setFilename] = useState<string>('process_input.txt');
   const [fileSize, setFileSize] = useState<number | undefined>(undefined);
   const [profiles, setProfiles] = useState<ProfileMetadata[]>([]);
-  const [selectedProfileId, setSelectedProfileId] = useState<string>('signavio');
-  const [samples, setSamples] = useState<SampleFile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('celonis');
   const [loading, setLoading] = useState<boolean>(false);
   const [sidebarError, setSidebarError] = useState<UiError | null>(null);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
@@ -72,9 +69,8 @@ export default function App() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [laneMap, setLaneMap] = useState<Record<string, string>>({});
   const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState<boolean>(false);
-  const [isTemplatesAndSamplesOpen, setIsTemplatesAndSamplesOpen] = useState<boolean>(false);
+  const [isTemplateSheetOpen, setIsTemplateSheetOpen] = useState<boolean>(false);
   const [isLaneMappingOpen, setIsLaneMappingOpen] = useState<boolean>(false);
-  const [isStepBuilderOpen, setIsStepBuilderOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Layout View States
@@ -140,7 +136,7 @@ export default function App() {
       .catch((err) => console.error('Failed to load templates:', err));
   };
 
-  // Initial mount: load config, profiles, templates, samples
+  // Initial mount: load config, profiles and templates. Nothing is preloaded onto the canvas.
   useEffect(() => {
     fetchServerConfig();
 
@@ -154,25 +150,6 @@ export default function App() {
       .catch((err) => console.error('Failed to load profiles:', err));
 
     fetchTemplates();
-
-    fetch('/api/samples')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.samples && data.samples.length > 0) {
-          setSamples(data.samples);
-          const defaultSample =
-            data.samples.find((s: SampleFile) => s.name.includes('sample_sop.md')) ||
-            data.samples.find((s: SampleFile) => s.name.includes('sop')) ||
-            data.samples[0];
-          // Preload the text so the person can read it, but never call the model on page load.
-          if (defaultSample?.content) {
-            setInputText(defaultSample.content);
-            setFilename(defaultSample.name);
-            setFileSize(new Blob([defaultSample.content]).size);
-          }
-        }
-      })
-      .catch((err) => console.error('Failed to load samples:', err));
   }, []);
 
   /** Surfaces an API failure (sidebar card, toast, row errors) and throws a HandledApiError. */
@@ -266,30 +243,6 @@ export default function App() {
       showUnexpectedError(err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSelectSample = async (sample: SampleFile) => {
-    if (sample.content && sample.content.trim()) {
-      setInputText(sample.content);
-      setFilename(sample.name);
-      setFileSize(new Blob([sample.content]).size);
-      convertProcess(sample.content, sample.name, selectedProfileId, selectedTemplateId, laneMap);
-    } else if (sample.download_url) {
-      setLoading(true);
-      setSidebarError(null);
-      setFilename(sample.name);
-      try {
-        const res = await fetch(sample.download_url);
-        if (!res.ok) throw new Error(`Failed to download sample file ${sample.name}`);
-        const blob = await res.blob();
-        setFileSize(blob.size);
-        const file = new File([blob], sample.name, { type: blob.type || 'application/octet-stream' });
-        await handleFileUpload(file);
-      } catch (err) {
-        showUnexpectedError(err);
-        setLoading(false);
-      }
     }
   };
 
@@ -460,10 +413,9 @@ export default function App() {
         selectedTemplateId={selectedTemplateId}
         onSelectTemplate={handleTemplateChange}
         onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
-        onOpenTemplatesAndSamples={() => setIsTemplatesAndSamplesOpen(true)}
+        onOpenTemplate={() => setIsTemplateSheetOpen(true)}
         onOpenLaneMapping={() => setIsLaneMappingOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenStepBuilder={() => setIsStepBuilderOpen(true)}
         activeModelLabel={
           settings.provider
             ? `${settings.provider === 'mock' ? 'Rule engine' : settings.provider}${settings.model ? ' · ' + settings.model : ''}`
@@ -499,8 +451,6 @@ export default function App() {
           fileName={filename}
           fileSize={fileSize}
           onFileUpload={handleFileUpload}
-          samples={samples}
-          onSelectSample={handleSelectSample}
           onConvert={() =>
             convertProcess(inputText, filename, selectedProfileId, selectedTemplateId, laneMap)
           }
@@ -554,9 +504,7 @@ export default function App() {
             ) : (
               <EmptyState
                 onFileUpload={handleFileUpload}
-                samples={samples}
-                onSelectSample={handleSelectSample}
-                onOpenTemplatesAndSamples={() => setIsTemplatesAndSamplesOpen(true)}
+                onOpenTemplate={() => setIsTemplateSheetOpen(true)}
               />
             )}
           </div>
@@ -584,14 +532,10 @@ export default function App() {
       </div>
 
       {/* 3. Slide-over Sheets */}
-      <TemplatesAndSamplesSheet
-        isOpen={isTemplatesAndSamplesOpen}
-        onClose={() => setIsTemplatesAndSamplesOpen(false)}
-        samples={samples}
-        onSelectSample={handleSelectSample}
-        onOpenStepBuilder={() => setIsStepBuilderOpen(true)}
+      <TemplateSheet
+        isOpen={isTemplateSheetOpen}
+        onClose={() => setIsTemplateSheetOpen(false)}
         onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
-        currentFilename={filename}
       />
 
       <SettingsSheet
@@ -603,16 +547,6 @@ export default function App() {
           setSettings(next);
           setSidebarError(null);
         }}
-      />
-
-      <StepBuilderSheet
-        isOpen={isStepBuilderOpen}
-        onClose={() => setIsStepBuilderOpen(false)}
-        onConvertToDiagram={handleFileUpload}
-        rowErrors={rowErrors}
-        onNotify={(title, message) =>
-          setToast({ id: String(Date.now()), type: 'error', title, message })
-        }
       />
 
       <TemplateManagerSheet

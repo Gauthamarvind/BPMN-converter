@@ -69,7 +69,7 @@ def process_pipeline(
     Args:
         raw_content: Input file or text bytes.
         filename: Name of the input document (determines parser & title).
-        profile_name: Target BPMN vendor profile ('generic', 'camunda', 'signavio', 'celonis', 'aris').
+        profile_name: Target export profile ('celonis' or 'generic').
         mock: When True, uses deterministic rule-based mock extraction without calling LLM.
         provider_name: LLM provider override ('openai_compatible', 'anthropic', 'gemini').
         model: LLM model name override.
@@ -220,8 +220,10 @@ def render_ir(
                 templateId=template_id,
                 laneMap=lane_map or {}
             )
-            if template_spec.source_vendor in ("signavio", "camunda", "aris", "celonis"):
-                profile_name = template_spec.source_vendor
+            # A Celonis reference template pins the Celonis profile; templates exported from
+            # other tools (Camunda, Signavio, ARIS, ...) keep whatever target the caller chose.
+            if template_spec.source_vendor == "celonis":
+                profile_name = "celonis"
 
             template_info = {
                 "template_id": template_id,
@@ -275,7 +277,7 @@ def render_ir(
         )
 
     # 8. Multi-Profile Bulk Export Metadata
-    supported_profiles = ["generic", "camunda", "signavio", "celonis", "aris"]
+    supported_profiles = ["celonis", "generic"]
     bulk_export = {
         "process_name": repaired_ir.name or Path(filename).stem,
         "supported_profiles": supported_profiles,

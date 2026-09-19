@@ -58,16 +58,16 @@ class TestTemplates(unittest.TestCase):
         res = process_pipeline(
             raw_content=self.sample_text.encode("utf-8"),
             filename="loan_process.txt",
-            profile_name="camunda",
+            profile_name="celonis",
             mock=True,
-            template_id="default_camunda"
+            template_id="default_celonis"
         )
         self.assertTrue(res["success"])
         self.assertIsNotNone(res.get("template_info"))
-        self.assertEqual(res["template_info"]["template_id"], "default_camunda")
-        self.assertEqual(res["template_info"]["source_vendor"], "camunda")
+        self.assertEqual(res["template_info"]["template_id"], "default_celonis")
+        self.assertEqual(res["template_info"]["source_vendor"], "celonis")
         self.assertIn("bpmn_xml", res)
-        self.assertIn("Lane_Initiator", res["bpmn_xml"])
+        self.assertIn("Lane_Sales_Order", res["bpmn_xml"])
         self.assertIsNotNone(res["ir"].get("templateBindings"))
 
     def test_blank_generators(self):

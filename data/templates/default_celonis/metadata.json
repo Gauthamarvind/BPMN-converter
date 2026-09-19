@@ -5,7 +5,7 @@
   "source_vendor": "celonis",
   "upload_date": "2026-09-18 09:01:36",
   "filename": "default_celonis.bpmn",
-  "is_default": false,
+  "is_default": true,
   "derived_profile": "profile_default_celonis",
   "description": "Reference BPMN template conforming to Celonis",
   "pools_count": 1,

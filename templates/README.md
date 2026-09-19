@@ -12,9 +12,6 @@ This directory contains standardized, downloadable process capture templates and
 | **`Process_Capture_Template_Example.xlsx`** | Excel (.xlsx) | Reference example showing a complete 8-step employee leave request workflow. |
 | **`Process_Capture_Template.docx`** | Word (.docx) | Document-style capture with headings, narrative context, and structured step tables. |
 | **`Process_Capture_Template_Example.docx`** | Word (.docx) | Pre-filled Word document showing standard procedure capture. |
-| **`default_camunda.bpmn`** | BPMN 2.0 XML | Reference Camunda-compliant template diagram. |
-| **`default_signavio.bpmn`** | BPMN 2.0 XML | Reference SAP Signavio-compliant template diagram. |
-| **`default_aris.bpmn`** | BPMN 2.0 XML | Reference ARIS-compliant template diagram. |
 | **`default_celonis.bpmn`** | BPMN 2.0 XML | Reference Celonis-compliant template diagram. |
 
 ---
@@ -63,6 +60,6 @@ The template uses a simple 8-column primary table (plus 5 optional metadata colu
 ## 🚀 How to Upload & Generate Diagrams
 
 1. **Web App**: Open the Process2BPMN web application.
-2. **Upload**: Drag and drop your saved `.xlsx` or `.docx` file into the upload dropzone, or click **Templates & samples** → **Open Step Builder** to edit interactively in the browser.
+2. **Upload**: Drag and drop your saved `.xlsx` or `.docx` file into the upload dropzone.
 3. **Instant Diagram**: Process2BPMN will parse your table and immediately render a fully laid-out, standards-compliant BPMN 2.0 diagram.
 4. **Export**: Export as `.bpmn`, `.svg`, `.png`, or a complete `.zip` multi-format bundle.

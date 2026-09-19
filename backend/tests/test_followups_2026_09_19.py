@@ -4,7 +4,7 @@ Regression tests for the 2026-09-19 follow-ups:
 - OpenAICompatibleAdapter enables JSON mode when a schema is supplied and falls back cleanly
   when the server rejects `response_format`.
 - extract_with_self_healing forwards the ProcessIR schema to the provider.
-- The ARIS profile differs from generic in more than maxLabelLength.
+- The Celonis profile differs from generic in more than maxLabelLength.
 """
 
 from __future__ import annotations
@@ -154,14 +154,14 @@ class TestSchemaForwarded:
         assert "properties" in seen["schema"]
 
 
-class TestArisProfile:
-    def test_aris_differs_from_generic_beyond_label_length(self):
+class TestCelonisProfile:
+    def test_celonis_differs_from_generic_beyond_label_length(self):
         from backend.pipeline.linter import ProfileLinter
         linter = ProfileLinter()
-        aris = linter.load_profile("aris")
+        celonis = linter.load_profile("celonis")
         generic = linter.load_profile("generic")
-        assert aris["maxLabelLength"] != generic["maxLabelLength"]
-        assert aris["conditionLocation"] == "both"
+        assert celonis["maxLabelLength"] != generic["maxLabelLength"]
+        assert celonis["conditionLocation"] == "both"
         assert generic["conditionLocation"] == "conditionExpression"
         assert "callActivity" in generic["allowedElementTypes"]
-        assert "callActivity" not in aris["allowedElementTypes"]
+        assert "callActivity" not in celonis["allowedElementTypes"]

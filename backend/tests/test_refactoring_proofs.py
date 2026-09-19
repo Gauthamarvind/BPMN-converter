@@ -115,7 +115,7 @@ class TestRefactoringProofs(unittest.TestCase):
         self.assertIn("Unsupported LLM provider 'unknown_vendor_xyz'", str(ctx.exception))
 
     def test_mock_provider_converts_sample_sop_no_network(self):
-        sample_sop_path = _PROJECT_ROOT / "samples" / "sample_sop.md"
+        sample_sop_path = _PROJECT_ROOT / "backend" / "tests" / "fixtures" / "sample_sop.md"
         self.assertTrue(sample_sop_path.exists())
         content = sample_sop_path.read_bytes()
 
