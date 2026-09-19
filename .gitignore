@@ -25,3 +25,4 @@ data/templates/_prefs/
 Thumbs.db
 *.log
 fixes.patch
+converted/
