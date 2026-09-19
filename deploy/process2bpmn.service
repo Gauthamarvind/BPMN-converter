@@ -1,0 +1,62 @@
+# Run Process2BPMN under systemd, for hosts that are not running Docker.
+#
+#   sudo useradd --system --home /opt/process2bpmn --shell /usr/sbin/nologin process2bpmn
+#   sudo cp -r . /opt/process2bpmn && cd /opt/process2bpmn
+#   sudo -u process2bpmn python3 -m venv .venv
+#   sudo -u process2bpmn .venv/bin/pip install -r backend/requirements.txt
+#   sudo -u process2bpmn npm ci && sudo -u process2bpmn npm run build
+#   sudo cp deploy/process2bpmn.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now process2bpmn
+#
+# The .env file holds the model API key, so it is root-owned and readable only by the service
+# user: sudo chown root:process2bpmn /opt/process2bpmn/.env && sudo chmod 640 /opt/process2bpmn/.env
+
+[Unit]
+Description=Process2BPMN — process descriptions to BPMN 2.0
+Documentation=https://github.com/Gauthamarvind/BPMN-converter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=process2bpmn
+Group=process2bpmn
+WorkingDirectory=/opt/process2bpmn
+
+EnvironmentFile=/opt/process2bpmn/.env
+
+# Bind to loopback only: nginx terminates TLS and authenticates (deploy/nginx.conf).
+ExecStart=/opt/process2bpmn/.venv/bin/uvicorn backend.server:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 2 \
+    --proxy-headers \
+    --forwarded-allow-ips 127.0.0.1
+
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+
+# --- hardening -----------------------------------------------------------------------
+# The app writes only to ./data (uploaded reference templates and per-user preferences).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+ReadWritePaths=/opt/process2bpmn/data
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=process2bpmn
+
+[Install]
+WantedBy=multi-user.target

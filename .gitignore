@@ -20,6 +20,9 @@ __pycache__/
 data/templates/tpl_*
 data/templates/_prefs/
 
+# Real-model re-validation output (scope v2 phase 7)
+revalidation/
+
 # OS & Editor files
 .DS_Store
 Thumbs.db

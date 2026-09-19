@@ -1,4 +1,4 @@
-.PHONY: dev run test lint build schemas templates docker-build docker-run
+.PHONY: dev run test revalidate lint build schemas templates docker-build docker-run deploy-prod
 
 # Run Vite dev server on :3000 (proxying /api to :8000) and uvicorn on :8000
 dev:
@@ -14,6 +14,10 @@ run: build
 test:
 	pytest -v
 	npm run lint
+
+# Re-run the free-text fixtures through the configured real model (scope v2 phase 7)
+revalidate:
+	python3 scripts/revalidate_extraction.py
 
 # Lint design rules and TypeScript definitions
 lint:
@@ -38,3 +42,7 @@ docker-build:
 # Run Docker container locally on :8000
 docker-run:
 	docker run -p 8000:8000 --env-file .env process2bpmn
+
+# Start the hosted configuration (loopback only; put nginx in front — see deploy/nginx.conf)
+deploy-prod:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
