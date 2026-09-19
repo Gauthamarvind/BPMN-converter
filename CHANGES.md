@@ -91,12 +91,36 @@ test in `backend/tests/test_review_fixes.py` or `backend/tests/test_frontend_api
 - README: layout claims made accurate; new "Deploying for a team" and "Export gate" sections.
 - `.env.example`: multi-user settings documented.
 
+## Follow-ups (2026-09-19)
+
+### LLM adapters
+- New `LLM_TIMEOUT` setting (default 90s) replaces the hard-coded per-adapter timeout. Passed
+  to every adapter by the factory. Documented in `.env.example` and the README, with Ollama
+  guidance (`LLM_TIMEOUT=300`, `LLM_CONTEXT_TOKENS` <= Ollama's `num_ctx`).
+- `OpenAICompatibleAdapter` now sends `response_format: {"type": "json_object"}` whenever the
+  caller supplies a `json_schema`, which makes Ollama/OpenAI/Groq/Mistral return bare JSON
+  instead of prose-wrapped JSON. If the server rejects the parameter with HTTP 400 the request
+  is retried once without it, so older self-hosted endpoints keep working.
+- `extract_with_self_healing` now actually passes the `ProcessIR` JSON schema to
+  `provider.complete()`; previously the argument was never forwarded, so JSON mode was never on.
+
+### Profiles
+- `aris` profile is now intentionally different from `generic`: `conditionLocation: both`
+  (ARIS labels connections from the flow *name*, not from `conditionExpression`), no
+  `callActivity`, and the empty `extensionNamespaces` is explained in the file rather than left
+  looking like an omission. No vendor namespace was invented for it.
+
+### Frontend build
+- `vite.config.ts` uses `import.meta.dirname` (ESM) instead of the CommonJS `__dirname`.
+- `BpmnViewer.tsx` imports `bpmn-js` dynamically, so the ~600 kB viewer bundle becomes its own
+  chunk loaded on first render instead of being inlined into the main bundle. Effects that
+  render XML / highlight selection now wait for the viewer to be ready.
+
+### Housekeeping
+- Stale `bun.lock` removed; `bun.lock`/`bun.lockb` added to `.gitignore` (npm is the package
+  manager, `package-lock.json` is committed). `fixes.patch` was already ignored and untracked.
+
 ## Known leftovers (not changed here)
-- `bun.lock` is stale: it lists `express` and `@google/genai`, which `package.json` does not
-  declare. Regenerate or delete it once `package-lock.json` is committed.
-- `aris` and `generic` profiles differ only in `maxLabelLength`, so their exports can be
-  byte-identical for short labels. If ARIS needs specific namespaces/attributes, add them to
-  `profiles/aris.yaml`.
 - Real-tool import verification (Camunda Modeler, Signavio, ARIS, Celonis) is still manual —
   see the checklist in the review (T18).
 - No Vitest/Playwright suite yet; the Python contract test covers route drift, not UI behaviour.

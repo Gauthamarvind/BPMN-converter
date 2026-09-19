@@ -13,6 +13,7 @@ from backend.config import config
 from backend.llm.base import LLMProvider
 from backend.llm.structured import strip_markdown_fences
 from backend.llm.adapters._http import post_json
+from backend.llm.errors import LLMResponseError
 
 
 def normalize_chat_endpoint(base_url: str) -> str:
@@ -64,6 +65,16 @@ class OpenAICompatibleAdapter(LLMProvider):
             headers[self.auth_header] = self.api_key
         return headers
 
+    def _post(self, headers: Dict[str, str], payload: Dict[str, Any]) -> Dict[str, Any]:
+        return post_json(
+            endpoint=self.endpoint,
+            headers=headers,
+            payload=payload,
+            timeout=self.timeout,
+            provider=self.provider,
+            model=self.model,
+        )
+
     def complete(
         self,
         messages: List[Dict[str, str]],
@@ -80,14 +91,22 @@ class OpenAICompatibleAdapter(LLMProvider):
             "max_tokens": max_tokens,
         }
 
-        data = post_json(
-            endpoint=self.endpoint,
-            headers=headers,
-            payload=payload,
-            timeout=self.timeout,
-            provider=self.provider,
-            model=self.model,
-        )
+        # When the caller wants structured output, ask the server for JSON mode. OpenAI, Azure,
+        # Groq, Mistral and Ollama's /v1 endpoint honour `response_format`; some self-hosted
+        # servers reject unknown parameters with HTTP 400, so fall back to a plain request rather
+        # than failing the whole extraction.
+        if json_schema is not None:
+            payload["response_format"] = {"type": "json_object"}
+
+        try:
+            data = self._post(headers, payload)
+        except LLMResponseError as ex:
+            status = (ex.details or {}).get("status_code")
+            if json_schema is not None and status == 400 and "response_format" in str(ex).lower():
+                payload.pop("response_format", None)
+                data = self._post(headers, payload)
+            else:
+                raise
 
         choice = data.get("choices", [{}])[0]
         raw_text = choice.get("message", {}).get("content", "").strip()

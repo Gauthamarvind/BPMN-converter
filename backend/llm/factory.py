@@ -45,13 +45,14 @@ def get_llm_provider(
     key = api_key or config.llm.api_key
     mdl = model or config.llm.model
     header = auth_header or getattr(config.llm, "auth_header", "Authorization")
+    timeout = float(getattr(config.llm, "timeout", 90.0) or 90.0)
 
     if prov in ("openai", "openai_compatible", "ollama", "vllm", "lmstudio", "groq", "mistral", "openrouter"):
         from backend.llm.adapters.openai_compatible import OpenAICompatibleAdapter
-        return OpenAICompatibleAdapter(base_url=url, api_key=key, model=mdl, auth_header=header)
+        return OpenAICompatibleAdapter(base_url=url, api_key=key, model=mdl, auth_header=header, timeout=timeout)
     elif prov in ("anthropic", "claude"):
         from backend.llm.adapters.anthropic import AnthropicAdapter
-        kwargs = {"api_key": key, "model": mdl}
+        kwargs = {"api_key": key, "model": mdl, "timeout": timeout}
         if _is_custom_base_url(url):
             kwargs["base_url"] = url
         return AnthropicAdapter(**kwargs)
@@ -63,13 +64,13 @@ def get_llm_provider(
                 "LLM_PROVIDER=gemini but the optional adapter backend/llm/adapters/gemini.py is not "
                 "installed. Restore the file or choose another provider."
             ) from ex
-        kwargs = {"api_key": key, "model": mdl}
+        kwargs = {"api_key": key, "model": mdl, "timeout": timeout}
         if _is_custom_base_url(url):
             kwargs["base_url"] = url
         return GeminiAdapter(**kwargs)
     elif prov == "mock":
         from backend.llm.adapters.mock import MockAdapter
-        return MockAdapter(base_url=url, api_key=key, model=mdl)
+        return MockAdapter(base_url=url, api_key=key, model=mdl, timeout=timeout)
     else:
         raise LLMConfigurationError(
             f"Unsupported LLM provider '{prov}'. Supported providers: openai_compatible, anthropic, gemini, mock.",

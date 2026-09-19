@@ -1,6 +1,9 @@
 # Dependencies & Packages
 node_modules/
 dist/
+# npm is the package manager (package-lock.json is committed); never commit bun lockfiles
+bun.lock
+bun.lockb
 
 # Python Cache & Runtime Artifacts
 __pycache__/
