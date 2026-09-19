@@ -181,7 +181,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileInputChange}
-                  accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt"
+                  accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt,.bpmn,.xml"
                   className="hidden"
                 />
                 <div
@@ -330,7 +330,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="file"
               ref={fileInputRef}
               onChange={handleFileInputChange}
-              accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt"
+              accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt,.bpmn,.xml"
               className="hidden"
             />
             <div

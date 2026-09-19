@@ -5,6 +5,7 @@ Converts unstructured process documents into BPMN 2.0 XML with full BPMNDI auto-
 Usage:
   process2bpmn convert input.docx -o out.bpmn                      # Celonis (default)
   python3 -m backend.cli convert input.docx --profile generic -o out.bpmn
+  process2bpmn import camunda_export.bpmn -o celonis_ready.bpmn    # BPMN in, BPMN out
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from backend.pipeline.profiles import DEFAULT_PROFILE, SUPPORTED_PROFILES
 
 from backend.pipeline.mock_extractor import generate_mock_ir_from_text  # re-exported for backwards compatibility
 
-__all__ = ["generate_mock_ir_from_text", "convert_file", "main"]
+__all__ = ["generate_mock_ir_from_text", "convert_file", "import_bpmn_file", "main"]
 
 
 def _resolve_template_id(template: Optional[str], mock: bool) -> Optional[str]:
@@ -127,6 +128,72 @@ def convert_file(
     return xml_output
 
 
+def import_bpmn_file(
+    input_path: str,
+    output_path: Optional[str] = None,
+    profile_name: str = DEFAULT_PROFILE,
+    relayout: bool = False,
+    template: Optional[str] = None,
+    force: bool = False,
+) -> str:
+    """
+    Imports a BPMN 2.0 file exported from another tool and re-exports it for the target
+    profile. Vendor namespaces and extension elements are dropped. No model is called.
+    """
+    from backend.pipeline.process_pipeline import import_bpmn_pipeline, ExportBlockedError
+
+    src = Path(input_path)
+    if not src.is_file():
+        raise FileNotFoundError(f"Input file not found: {input_path}")
+
+    template_id = _resolve_template_id(template, mock=True) if template else None
+    result = import_bpmn_pipeline(
+        raw_content=src.read_bytes(),
+        filename=src.name,
+        profile_name=profile_name,
+        relayout=relayout,
+        template_id=template_id,
+    )
+
+    info = result.get("import_info") or {}
+    print(
+        f"[Process2BPMN] Imported {info.get('element_count', 0)} elements and "
+        f"{info.get('flow_count', 0)} flows from a '{info.get('source_vendor', 'generic')}' file "
+        f"({'original layout kept' if info.get('original_layout') else 'auto-layout applied'}).",
+        file=sys.stderr,
+    )
+    for ns in info.get("stripped_namespaces", []):
+        print(f"[STRIPPED] namespace {ns}", file=sys.stderr)
+    for ext in info.get("stripped_extensions", []):
+        print(f"[STRIPPED] extension element {ext}", file=sys.stderr)
+    for warning in info.get("warnings", []):
+        print(f"[IMPORT] {warning}", file=sys.stderr)
+    for issue in result.get("validation_issues", []):
+        print(f"[{issue.get('severity', 'INFO')}] {issue.get('message', '')}", file=sys.stderr)
+
+    xml_output = result["bpmn_xml"]
+    if result.get("export_blocked"):
+        if force:
+            print(
+                "[Process2BPMN] WARNING: exporting despite ERROR-level issues because --force was given.",
+                file=sys.stderr,
+            )
+        else:
+            raise ExportBlockedError(
+                "Export is BLOCKED: the imported diagram has ERROR-level issues that need review "
+                "(see messages above). Re-run with --force to write the XML for inspection.",
+                issues=[i for i in result.get("validation_issues", []) if i.get("severity") == "ERROR"],
+            )
+
+    if output_path:
+        out_p = Path(output_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        out_p.write_text(xml_output, encoding="utf-8")
+        print(f"[Process2BPMN] Successfully exported BPMN 2.0 to: {output_path}", file=sys.stderr)
+
+    return xml_output
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="process2bpmn",
@@ -155,6 +222,28 @@ def main():
         help="Write the BPMN file even when validation found blocking errors (exit code 0 instead of 2)"
     )
 
+    # Command: import
+    import_parser = subparsers.add_parser(
+        "import", help="Import a BPMN 2.0 file from another tool and re-export it"
+    )
+    import_parser.add_argument("input", help="Path to a .bpmn or BPMN 2.0 .xml file")
+    import_parser.add_argument(
+        "--profile", "-p",
+        default=DEFAULT_PROFILE,
+        choices=list(SUPPORTED_PROFILES),
+        help=f"Target export profile (default: {DEFAULT_PROFILE})"
+    )
+    import_parser.add_argument("--output", "-o", help="Output .bpmn file path (default: stdout)")
+    import_parser.add_argument(
+        "--relayout", action="store_true", default=False,
+        help="Discard the source file's coordinates and lay the diagram out from scratch"
+    )
+    import_parser.add_argument("--template", "-t", help="BPMN reference template ID or file path")
+    import_parser.add_argument(
+        "--force", action="store_true", default=False,
+        help="Write the BPMN file even when validation found blocking errors"
+    )
+
     # Command: profiles
     subparsers.add_parser("profiles", help="List available target-tool export profiles")
 
@@ -167,6 +256,22 @@ def main():
             data = linter.load_profile(p)
             print(f"  • {p:<10} - {data.get('displayName', p)}: {data.get('description', '')}")
         sys.exit(0)
+
+    elif args.command == "import":
+        try:
+            xml = import_bpmn_file(
+                input_path=args.input,
+                output_path=args.output,
+                profile_name=args.profile,
+                relayout=bool(getattr(args, "relayout", False)),
+                template=getattr(args, "template", None),
+                force=bool(getattr(args, "force", False)),
+            )
+            if not args.output:
+                print(xml)
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(2 if e.__class__.__name__ == "ExportBlockedError" else 1)
 
     elif args.command == "convert":
         try:

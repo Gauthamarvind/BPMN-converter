@@ -50,7 +50,8 @@ from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import BpmnSchemaError, BpmnSchemaConfigurationError
 from backend.pipeline.linter import ProfileLinter
 from backend.pipeline.profiles import DEFAULT_PROFILE, SUPPORTED_PROFILES
-from backend.pipeline.process_pipeline import process_pipeline, render_ir, ExportBlockedError
+from backend.ingestion.bpmn_importer import BpmnImportError, looks_like_bpmn
+from backend.pipeline.process_pipeline import process_pipeline, render_ir, import_bpmn_pipeline, ExportBlockedError
 from backend.pipeline.xsd_validator import validate_bpmn
 from backend.security import (
     security,
@@ -203,6 +204,14 @@ async def row_validation_error_handler(request: Request, exc: RowValidationError
     )
 
 
+@app.exception_handler(BpmnImportError)
+async def bpmn_import_error_handler(request: Request, exc: BpmnImportError):
+    return JSONResponse(
+        status_code=422,
+        content={"error": str(exc), "detail": str(exc), "kind": "BpmnImportError"},
+    )
+
+
 @app.exception_handler(ExportBlockedError)
 async def export_blocked_handler(request: Request, exc: ExportBlockedError):
     return JSONResponse(
@@ -343,6 +352,12 @@ def _convert_guarded(**kwargs):
     """Runs the pipeline inside an extraction slot so a burst of uploads cannot exhaust the server."""
     with extraction_slot:
         return process_pipeline(**kwargs)
+
+
+def _import_guarded(**kwargs):
+    """Imports inside an extraction slot: parsing a 15 MB BPMN file is not free either."""
+    with extraction_slot:
+        return import_bpmn_pipeline(**kwargs)
 
 
 def _mask(value: str) -> str:
@@ -709,6 +724,50 @@ def convert_json_payload(req: ConvertTextRequest, request: Request):
         template_id=req.template_id,
         lane_map=req.lane_map,
         strict=bool(req.strict),
+        user_id=current_user(request),
+    )
+
+
+@app.post("/api/import/bpmn")
+async def import_bpmn(
+    request: Request,
+    file: UploadFile = File(...),
+    profile: Optional[str] = Form(DEFAULT_PROFILE),
+    relayout: Optional[bool] = Form(False),
+    template_id: Optional[str] = Form(None),
+    strict: Optional[bool] = Form(False),
+):
+    """
+    Imports a BPMN 2.0 file exported from another modelling tool and returns it re-exported
+    for the target profile, in the same shape as /api/convert so the viewer, the Issues tab
+    and the export gate work unchanged.
+
+    Vendor namespaces and extension elements are dropped; the response reports what was
+    stripped and any element type that had to be approximated. No model is called.
+    """
+    _throttle(request)
+    raw_content = await file.read()
+    fname = Path(file.filename or "imported.bpmn").name
+
+    if len(raw_content) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds maximum upload size limit of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB.",
+        )
+    if not looks_like_bpmn(fname, raw_content):
+        raise HTTPException(
+            status_code=415,
+            detail="Expected a BPMN 2.0 file (.bpmn or .xml) whose contents declare a <definitions> root.",
+        )
+
+    return await run_in_threadpool(
+        _import_guarded,
+        raw_content=raw_content,
+        filename=fname,
+        profile_name=profile or DEFAULT_PROFILE,
+        relayout=bool(relayout),
+        template_id=template_id,
+        strict=bool(strict),
         user_id=current_user(request),
     )
 

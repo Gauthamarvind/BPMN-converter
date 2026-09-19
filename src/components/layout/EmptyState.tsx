@@ -43,7 +43,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         {/* Secondary Description */}
         <p className="text-[15px] text-[var(--text-secondary-color)] mt-2 max-w-lg leading-relaxed mx-auto">
           Drop your SOP, Excel, Word, or PDF document to automatically generate
-          standards-compliant BPMN 2.0 diagrams.
+          standards-compliant BPMN 2.0 diagrams — or drop a .bpmn file exported from
+          another modelling tool to clean it up and re-export it.
         </p>
       </div>
 
@@ -55,7 +56,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           const file = e.target.files?.[0];
           if (file) onFileUpload(file);
         }}
-        accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt"
+        accept=".txt,.md,.markdown,.csv,.docx,.xlsx,.pdf,.json,.srt,.vtt,.bpmn,.xml"
         className="hidden"
       />
 
@@ -82,7 +83,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           </span>
         </div>
         <span className="text-[12px] text-[var(--text-tertiary)]">
-          Supports .docx, .xlsx, .pdf, .csv, .txt, .md, .vtt
+          Supports .docx, .xlsx, .pdf, .csv, .txt, .md, .vtt — or a .bpmn file from another tool
         </span>
       </div>
 

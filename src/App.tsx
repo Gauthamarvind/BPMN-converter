@@ -4,6 +4,7 @@ import {
   FlowNode,
   ProfileMetadata,
   ConversionResponse,
+  ImportInfo,
   LintResult,
   LLMSettings,
   TemplateRecord,
@@ -39,6 +40,12 @@ const SETTINGS_STORAGE_KEY = 'process2bpmn.settings.v1';
 
 /** Scope v2 default export target. The backend defaults to the same profile. */
 const DEFAULT_PROFILE_ID = 'celonis';
+
+/** Files that go to the BPMN import path instead of the extraction pipeline. */
+const BPMN_EXTENSIONS = ['.bpmn', '.bpmn2', '.xml'];
+
+const isBpmnFile = (name: string) =>
+  BPMN_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 
 function loadStoredSettings(): LLMSettings {
   const fallback: LLMSettings = { provider: '', model: '', baseUrl: '', apiKey: '', temperature: 0.1 };
@@ -105,6 +112,7 @@ export default function App() {
   const [rowErrors, setRowErrors] = useState<RowValidationErrorItem[]>([]);
   const [conversionMeta, setConversionMeta] = useState<any>(null);
   const [bulkExport, setBulkExport] = useState<BulkExportData | undefined>(undefined);
+  const [importInfo, setImportInfo] = useState<ImportInfo | undefined>(undefined);
 
   // LLM Engine Settings
   // Empty values mean "use the server's .env configuration". Only what the user
@@ -191,6 +199,7 @@ export default function App() {
     setValidationIssues(data.validation_issues || []);
     setConversionMeta(data.metadata);
     setBulkExport(data.bulk_export);
+    setImportInfo(data.import_info);
     if (data.template_info?.lane_map) {
       setLaneMap((prev) => ({ ...prev, ...data.template_info?.lane_map }));
     }
@@ -254,9 +263,62 @@ export default function App() {
   };
 
   /** Converts an uploaded file. Resolves to true on success so callers (Step Builder) can decide whether to close. */
+  /**
+   * Imports a BPMN file exported from another tool. Deterministic — no model call — and the
+   * diagram keeps the coordinates the source file carried.
+   */
+  const importBpmnFile = async (file: File): Promise<boolean> => {
+    setLoading(true);
+    setSidebarError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (selectedProfileId) formData.append('profile', selectedProfileId);
+      if (selectedTemplateId) formData.append('template_id', selectedTemplateId);
+
+      const res = await fetch('/api/import/bpmn', { method: 'POST', body: formData });
+      if (!res.ok) {
+        await handleFailedResponse(res);
+      }
+      const data: ConversionResponse = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Import failed');
+      }
+      applyConversionResult(data);
+      setInputText('');
+      setNormalizedText('');
+
+      const info = data.import_info;
+      if (info) {
+        const strippedCount = info.stripped_namespaces.length + info.stripped_extensions.length;
+        const vendorLabel = info.source_vendor === 'generic' ? 'BPMN 2.0' : info.source_vendor;
+        setToast({
+          id: String(Date.now()),
+          type: 'success',
+          title: `Imported from ${vendorLabel}`,
+          message:
+            `${info.element_count} elements, ${info.flow_count} flows` +
+            (strippedCount > 0 ? ` · ${strippedCount} vendor extension(s) stripped` : '') +
+            (info.original_layout ? ' · original layout kept' : ' · auto-layout applied'),
+        });
+      }
+      return true;
+    } catch (err) {
+      showUnexpectedError(err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleFileUpload = async (file: File): Promise<boolean> => {
     setFilename(file.name);
     setFileSize(file.size);
+
+    if (isBpmnFile(file.name)) {
+      return importBpmnFile(file);
+    }
+
     setLoading(true);
     setSidebarError(null);
 
@@ -345,6 +407,12 @@ export default function App() {
     } finally {
       if (renderAbortRef.current === controller) setLoading(false);
     }
+  };
+
+  /** Discards imported coordinates: /api/render always lays the diagram out from scratch. */
+  const handleRelayout = () => {
+    setImportInfo((prev) => (prev ? { ...prev, original_layout: false } : prev));
+    rerenderFromIr(selectedProfileId, selectedTemplateId, laneMap);
   };
 
   const handleProfileChange = (newProfileId: string) => {
@@ -498,6 +566,8 @@ export default function App() {
                   laneCount={conversionMeta?.lane_count || processIr?.pools?.reduce((acc, p) => acc + p.lanes.length, 0) || 1}
                   extractionMode={conversionMeta?.extraction?.mode}
                   issuesCount={totalIssuesCount}
+                  canRelayout={Boolean(importInfo?.original_layout)}
+                  onRelayout={handleRelayout}
                   onOpenIssues={() => {
                     setIsInspectorOpen(true);
                     setInspectorTab('issues');
@@ -527,6 +597,7 @@ export default function App() {
           processIr={processIr}
           validationIssues={validationIssues}
           rowErrors={rowErrors}
+          importInfo={importInfo}
           lintResult={lintResult}
           exportBlocked={exportBlocked}
           sourceText={normalizedText || inputText}

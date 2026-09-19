@@ -81,9 +81,10 @@ The page opens empty — nothing is preloaded and no model is called until you c
 5. **Export** as `.bpmn`, `.svg`, `.png`, or a ZIP containing both the Celonis and generic `.bpmn` files.
 
 ### B. Import a BPMN file from another tool
-1. Click **Import BPMN** (sidebar or empty state) and choose a `.bpmn` / `.xml` exported from Camunda, Signavio, ARIS, Bizagi, Flowable or bpmn.io.
-2. The importer detects the source tool, removes vendor extensions, validates the graph and shows the diagram. Anything it had to drop or repair is listed under **Issues**.
-3. Export as Celonis or generic BPMN 2.0 exactly as in flow A.
+1. Drop a `.bpmn` / `.xml` exported from Camunda, Signavio, ARIS, Bizagi, Flowable or bpmn.io onto the canvas or the sidebar — the same dropzone as any other file. BPMN files are routed to the importer automatically.
+2. The importer detects the source tool, removes vendor namespaces and extension elements, validates the graph and shows the diagram. What it stripped, approximated or dropped is listed under **Issues**. No model is called.
+3. The diagram keeps the coordinates the source file carried. Click **Re-layout** on the status pill to replace them with a clean automatic layout.
+4. Export as Celonis or generic BPMN 2.0 exactly as in flow A.
 
 How to get a BPMN 2.0 file out of each tool:
 
@@ -197,6 +198,9 @@ python3 -m backend.cli convert path/to/sop.docx -p generic -o converted/sop_gene
 # Import a BPMN file from another tool and re-export for Celonis
 python3 -m backend.cli import path/to/camunda_export.bpmn -o converted/for_celonis.bpmn
 
+# Same, but discard the source coordinates and lay the diagram out from scratch
+python3 -m backend.cli import path/to/camunda_export.bpmn --relayout -o converted/for_celonis.bpmn
+
 # Offline rule engine (no model)
 python3 -m backend.cli convert path/to/sop.md --mock -o converted/sop.bpmn
 
@@ -253,7 +257,7 @@ Work is tracked on branch `scope-celonis-v2`.
 | 1 | Remove sample workflows, Step Builder, and the Signavio/Camunda/ARIS profiles | done |
 | 2 | Celonis as default target everywhere; empty start page; two-target toolbar | done |
 | 3 | Single Template page with one example process | done |
-| 4 | BPMN import from other tools (`/api/import/bpmn`, CLI `import`) | planned |
+| 4 | BPMN import from other tools (`/api/import/bpmn`, CLI `import`) | done |
 | 5 | Tech-stack slimming and test suite (Vitest + Playwright smoke) | planned |
 | 6 | Manual import verification: Celonis, bpmn.io, Bizagi, Flowable; round-trips from Camunda/Signavio/ARIS exports | planned |
 | 7 | Real-model (Ollama) extraction re-validation and team deployment | planned |

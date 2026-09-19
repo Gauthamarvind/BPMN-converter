@@ -134,6 +134,20 @@ export interface BulkExportData {
   available_formats: string[];
 }
 
+/** What the BPMN importer found and had to change. Present only on an imported diagram. */
+export interface ImportInfo {
+  source_vendor: string;
+  exporter?: string;
+  original_layout: boolean;
+  element_count: number;
+  flow_count: number;
+  pool_count: number;
+  lane_count: number;
+  stripped_namespaces: string[];
+  stripped_extensions: string[];
+  warnings: string[];
+}
+
 export interface ConversionResponse {
   success: boolean;
   export_blocked?: boolean;
@@ -148,6 +162,7 @@ export interface ConversionResponse {
     lane_map: Record<string, string>;
   };
   bulk_export?: BulkExportData;
+  import_info?: ImportInfo;
   metadata: {
     filename: string;
     process_name: string;
@@ -159,6 +174,7 @@ export interface ConversionResponse {
       mode: string;
       tokens_used: number;
     };
+    source_vendor?: string;
   };
   normalized_text: string;
   error?: string;
