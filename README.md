@@ -1,274 +1,259 @@
 # Process2BPMN
 
-**Process2BPMN** is an intelligent, vendor-agnostic pipeline and web application that converts unstructured natural language process descriptions into standards-compliant, syntactically valid, and cleanly laid out **BPMN 2.0** diagrams.
+**Process2BPMN** converts process descriptions — SOPs, meeting notes, transcripts, Word/Excel documents, filled-in capture forms — and BPMN files exported from other modelling tools into clean, standards-compliant **BPMN 2.0** diagrams that import directly into **Celonis** (default) or any standard BPMN 2.0 tool (bpmn.io, Bizagi, Flowable).
 
-Whether you have Standard Operating Procedures (SOPs), meeting notes, interview transcripts, tabular spreadsheets, Word documents, or audio subtitles (VTT/SRT), Process2BPMN extracts activities, events, gateways, roles, and sequences, runs graph validation and auto-repair, calculates Sugiyama layered layout coordinates, and exports vendor-tailored BPMN 2.0 XML.
+> **Scope v2 (September 2026).** The product has been narrowed to two export targets — Celonis and generic BPMN 2.0 — and gained a BPMN *import* path for files coming from other tools. The bundled sample workflows, the in-browser Step Builder and the Signavio/Camunda/ARIS export profiles have been removed. See [Roadmap](#roadmap-scope-v2) for what is done and what is in progress on branch `scope-celonis-v2`.
 
 ---
 
 ## Key Features
 
-- **Multi-Format Ingestion**: Supports `.docx`, `.xlsx`, `.pdf`, `.csv`, `.md`, `.txt`, and `.vtt`/`.srt` transcripts.
-- **Enterprise BPMN 2.0 Compatibility**: Generates valid BPMN 2.0 XML validated against official OMG BPMN 2.0 XSD schemas.
-- **Vendor Export Profiles**: Tailors XML namespaces and Diagram Interchange (DI) attributes for **Generic BPMN 2.0**, **SAP Signavio**, **Camunda 7 & 8**, **Celonis**, and **Software AG ARIS**.
-- **Deterministic Layout Engine**: Multi-lane Sugiyama layered layout — DFS cycle breaking (loop-backs are routed underneath, never re-ordered), longest-path layering, barycenter crossing reduction, and coordinate assignment.
-- **Vendor-Agnostic LLM Architecture**: Works with local models (Ollama, vLLM, LM Studio) or hosted cloud APIs (OpenAI, Azure OpenAI, Anthropic Claude, Google Gemini, Groq, OpenRouter), plus a zero-network deterministic Mock provider.
-- **Interactive No-Code Step Builder**: Capture, edit, reorder, and convert structured process steps directly in the browser.
-- **Pre-Formatted Process Capture Templates**: Downloadable Excel (`.xlsx`) and Word (`.docx`) interview templates with automatic column mapping.
-- **Export Gate**: a process with unreachable steps or unlabeled decision branches is shown for review but never exported — the UI disables Export, `/api/export/*` returns 422, `strict=true` makes `/api/convert*` refuse too, and the CLI exits with code 2 unless `--force`.
-- **Multi-User Ready**: reverse-proxy or token authentication, per-user reference templates, request throttling, and SSRF/XXE protection (see *Deploying for a team*).
+- **Multi-format ingestion**: `.docx`, `.xlsx`, `.pdf` (text layer), `.csv`, `.md`, `.txt`, `.json`, and `.vtt`/`.srt` transcripts, plus pasted text.
+- **BPMN import from other tools**: upload a `.bpmn` / BPMN 2.0 `.xml` exported from Camunda Modeler, SAP Signavio, ARIS, Bizagi, Flowable or bpmn.io. Vendor-specific namespaces and extension elements are stripped, the graph is validated and repaired, and the result is re-exported as Celonis-ready or generic BPMN 2.0.
+- **Process capture template**: one downloadable Excel (and Word) form with a single filled-in example. Filled forms are converted by rules — no language model involved.
+- **Two export targets**: **Celonis** (default) and **Generic BPMN 2.0** (bpmn.io, Bizagi, Flowable, any OMG-compliant importer).
+- **Strict BPMN 2.0 compliance**: every export is validated against the official OMG BPMN 2.0 XSD schemas.
+- **Deterministic layout**: multi-lane Sugiyama layered layout with cycle breaking and crossing minimisation; imported diagrams keep their original coordinates when present.
+- **Graph validation & auto-repair**: missing start/end events, dangling flows, unlabelled decision branches, unreachable steps; ERROR-level issues block export until fixed.
+- **Vendor-agnostic language model**: local (Ollama, vLLM, LM Studio) or hosted (OpenAI, Azure OpenAI, Anthropic, Google Gemini, Groq, OpenRouter), plus an offline mock provider.
+- **Reference BPMN templates**: upload your own Celonis/generic reference diagram to reuse its pools, lanes and namespaces; map extracted roles to its lanes.
+- **Traceability**: every element links back to the sentence or table row it came from.
+- **CLI** for batch conversion and CI use.
 
 ---
 
 ## Prerequisites
 
-- **Python**: 3.10 or newer (with `pip`)
-- **Node.js**: 18 or newer (with `npm` or `bun`)
-- **Optional**: Docker & Docker Compose for containerized deployment
+- **Python** 3.10 or newer (with `pip`)
+- **Node.js** 18 or newer (with `npm`)
+- **Optional**: Docker & Docker Compose
 
 ---
 
-## Quick Start & Running the App
+## Quick Start
 
-### 1. Development Mode (`make dev`)
+### Development mode (`make dev`)
 
-In development mode, Vite runs on port `3000` with hot-module reloading and proxies all `/api/*` requests to the FastAPI backend running on port `8000`:
+Vite serves the UI on port `3000` with hot reload and proxies `/api/*` to the FastAPI backend on port `8000`:
 
 ```bash
-# Install dependencies & start both backend and frontend in dev mode
 make dev
 ```
 
-Visit `http://localhost:3000` to access the interactive web application.
+Open `http://localhost:3000`.
 
-### 2. Production / Single-Server Mode (`make run`)
+### Production / single-server mode (`make run`)
 
-Builds the frontend production bundle and serves both the SPA and FastAPI REST API from a single uvicorn instance on port `8000`:
+Builds the frontend and serves the SPA and the REST API from one uvicorn process on port `8000`:
 
 ```bash
 make run
 ```
 
-Visit `http://localhost:8000` in your browser.
+Open `http://localhost:8000`.
 
 ---
 
 ## Docker Deployment
 
-### Using Docker
-
 ```bash
-# Build multi-stage Docker image
-make docker-build
-# or: docker build -t process2bpmn .
+# Build the multi-stage image
+make docker-build            # or: docker build -t process2bpmn .
 
-# Run container on port 8000
-make docker-run
-# or: docker run -d -p 8000:8000 --env-file .env --name process2bpmn process2bpmn
-```
+# Run on port 8000
+make docker-run              # or: docker run -d -p 8000:8000 --env-file .env --name process2bpmn process2bpmn
 
-### Using Docker Compose
-
-```bash
-# Start with persistent volume for custom templates and environment configuration
+# Or with Compose (persists ./data for uploaded reference templates)
 docker compose up -d
 ```
 
-The container mounts `./data` into `/app/data` to persist custom uploaded BPMN reference templates across container restarts.
+---
+
+## How the app works
+
+The page opens empty — nothing is preloaded and no model is called until you convert something.
+
+### A. Convert a document or pasted text
+1. Drop a file on the canvas or into the left sidebar, or paste text.
+2. The target tool is **Celonis** by default. Switch to **Generic BPMN 2.0** in the toolbar if you need a plain OMG file.
+3. Click **Convert**.
+4. Review the diagram; click any element to see its details and the source sentence it came from. The **Issues** tab lists warnings and anything that blocks export.
+5. **Export** as `.bpmn`, `.svg`, `.png`, or a ZIP containing both the Celonis and generic `.bpmn` files.
+
+### B. Import a BPMN file from another tool
+1. Click **Import BPMN** (sidebar or empty state) and choose a `.bpmn` / `.xml` exported from Camunda, Signavio, ARIS, Bizagi, Flowable or bpmn.io.
+2. The importer detects the source tool, removes vendor extensions, validates the graph and shows the diagram. Anything it had to drop or repair is listed under **Issues**.
+3. Export as Celonis or generic BPMN 2.0 exactly as in flow A.
+
+How to get a BPMN 2.0 file out of each tool:
+
+| Source tool | Export action | Notes |
+| :--- | :--- | :--- |
+| Camunda Modeler 7/8 | File → Save As → `.bpmn` | Camunda namespace and `zeebe:` extensions are stripped. |
+| SAP Signavio | Export → BPMN 2.0 XML | `sid-*` IDs are kept; Signavio styling tags are dropped. |
+| Software AG ARIS | Export → BPMN 2.0 | ARIS attribute extensions are dropped. |
+| Bizagi Modeler | Export/Import → Export to BPMN | Bizagi's native `.bpm` is not BPMN — export to `.bpmn` first. |
+| Flowable | Export → BPMN 2.0 XML | `flowable:` extensions are dropped. |
+| bpmn.io / other | Download `.bpmn` | Imported as-is. |
+
+### C. Use the process capture template (no model needed)
+1. Open **Template** in the toolbar. One page shows the capture form and one filled-in example process.
+2. Download the blank Excel (or Word) form, fill it in, and upload it like any other file.
+3. The rows are converted by rules and any row problems are reported with the row number.
+
+### D. Reuse your own reference diagram
+1. **Templates → Upload** a `.bpmn` reference diagram from Celonis or a generic tool.
+2. Select it in the toolbar and, if needed, open **Lane mapping** to match your roles to its lanes.
+3. Convert or re-render; the export uses the template's pools, lanes and namespaces.
 
 ---
 
+## Export Targets
 
-## Deploying for a team
+| Target | Default | What it produces | Import into |
+| :--- | :--- | :--- | :--- |
+| **Celonis** | ✅ | BPMN 2.0 XML tuned for Celonis process import: single collaboration pool with swimlanes, clean activity identifiers, conditions on flows, no vendor extensions. | Celonis Process Designer / process import |
+| **Generic BPMN 2.0** | | Plain OMG BPMN 2.0 (`http://www.omg.org/spec/BPMN/20100524/MODEL`) with full BPMNDI. | bpmn.io, Bizagi Modeler, Flowable, Camunda Modeler, Signavio, ARIS |
 
-Out of the box the server is a single-user tool (`APP_AUTH_MODE=none`). To run it for several
-people behind a shared URL:
+Both profiles live in `profiles/celonis.yaml` and `profiles/generic.yaml`.
 
-1. Put an SSO gateway in front of it (oauth2-proxy, Cloudflare Access, Traefik ForwardAuth,
-   Nginx `auth_request`) and set `APP_AUTH_MODE=proxy` — the gateway's identity header
-   (`APP_AUTH_HEADER`, default `X-Forwarded-User`) becomes the user. Every `/api/*` call without
-   it is rejected with 401 (`/api/health` stays public for load balancers).
-   For CI or scripts use `APP_AUTH_MODE=token` with `Authorization: Bearer <APP_API_TOKEN>`.
-2. Decide who pays for the model. `ALLOW_CLIENT_LLM_OVERRIDES=false` makes everyone use the
-   server's `.env` key; leave it `true` to let people bring their own key from the Settings sheet.
-   Client-supplied endpoints are always checked against the SSRF rules
-   (`LLM_ALLOW_PRIVATE_BASE_URLS`, `LLM_BASE_URL_ALLOWLIST`).
-3. Uploaded reference templates belong to the user who uploaded them; built-in vendor templates
-   are shared and cannot be deleted. "Default template" is stored per user.
-4. Throttling: `RATE_LIMIT_PER_MINUTE` (30/min per user when auth is on) and
-   `MAX_CONCURRENT_EXTRACTIONS` (model calls in flight; extra requests wait up to
-   `EXTRACTION_QUEUE_TIMEOUT_SECONDS`, then get 503).
-5. Serve the UI and API from the same origin; set `CORS_ALLOW_ORIGINS` only if you don't.
+---
 
-### Export gate
+## Choosing a model
 
-Conversion always returns the diagram so you can see what is wrong, with `export_blocked: true`
-when the process has ERROR-level issues (unreachable steps, unlabeled decision branches). The
-files people actually download go through `POST /api/export/bpmn` and `POST /api/export/bulk`,
-which refuse blocked processes (422) and validate every file against the OMG BPMN 2.0 XSD. The
-bulk bundle contains one *distinct* `.bpmn` per vendor profile plus SVG/PNG.
-API clients that must never receive an unreviewed diagram pass `strict=true` to
-`/api/convert`, `/api/convert-json` or `/api/render`. The CLI refuses to write a blocked
-diagram and exits with code 2; add `--force` to write it for inspection.
+The server reads its model settings from `.env` at startup — `.env.example` has one block per provider. Restart after editing.
 
-## Choosing a model (read this first)
+- The **model pill** in the toolbar shows what the next conversion will use (green = ready, red = no API key, grey = rule engine). Click it to open Settings.
+- **Settings → Test connection** sends one tiny request and shows either the latency or the exact error.
+- Settings overrides live in the browser for the session; the API key is never persisted. Leave the provider on "Server default" to use `.env`.
 
-The server reads its model settings from `.env` at startup — the template `.env.example` has one
-block per provider (Gemini, Ollama, OpenAI-compatible, Azure, Anthropic, mock). Restart after editing.
+Structured inputs — the filled-in capture form and imported BPMN files — never call a model. Switching the target tool, reference template or lane mapping re-renders from the extracted process (`POST /api/render`) instead of calling the model again.
 
-Two things in the app make this painless:
-
-- The **model pill** in the toolbar shows what the next conversion will use (green dot = ready,
-  red = no API key, grey = rule engine). Click it to open Settings.
-- **Settings → Test connection** sends one tiny request to the model and shows either the latency
-  or the exact error (unreachable endpoint, rejected key, rate limit) without converting anything.
-
-Settings overrides live in the browser for that session; the API key is never persisted. Leave the
-provider on "Server default" to use `.env`.
-
-Structured inputs — the fill-in Excel/Word template, the Step Builder and legacy step lists — never
-call a model. Switching the target tool, reference template or lane mapping re-renders the diagram
-from the extracted process (`POST /api/render`) instead of calling the model again.
-
-## Switching LLM Providers & Models
-
-Process2BPMN is fully vendor-agnostic and configured via environment variables. Configure your `.env` file (or copy from `.env.example`) to select your preferred provider:
-
-### Core LLM Configuration Variables
+### Core configuration variables
 
 | Variable | Description | Default |
 | :--- | :--- | :--- |
-| `LLM_PROVIDER` | Active LLM adapter: `ollama`, `openai_compatible`, `anthropic`, `gemini`, or `mock` | `ollama` |
+| `LLM_PROVIDER` | `ollama`, `openai_compatible`, `anthropic`, `gemini`, `azure` or `mock` | `ollama` |
 | `LLM_MODEL` | Model name or deployment ID | `llama3` |
-| `LLM_BASE_URL` | Base API URL for chat completions | `http://localhost:11434/v1` |
-| `LLM_API_KEY` | API Key or authentication token | `ollama` |
-| `LLM_AUTH_HEADER` | Header name for authorization: `Authorization`, `api-key`, `x-api-key`, or `x-goog-api-key` | `Authorization` |
-| `LLM_CONTEXT_TOKENS` | Token window size for intelligent chunking | `8192` |
-| `LLM_MAX_OUTPUT_TOKENS`| Maximum output tokens per generation request | `4096` |
+| `LLM_BASE_URL` | Base API URL | `http://localhost:11434/v1` |
+| `LLM_API_KEY` | API key or token | `ollama` |
+| `LLM_AUTH_HEADER` | `Authorization`, `api-key`, `x-api-key` or `x-goog-api-key` | `Authorization` |
+| `LLM_CONTEXT_TOKENS` | Context window used for chunking | `8192` |
+| `LLM_MAX_OUTPUT_TOKENS` | Max output tokens per request | `4096` |
 | `LLM_TEMPERATURE` | Generation temperature | `0.1` |
-| `LLM_TIMEOUT` | Seconds to wait for one model response. Raise for local models on CPU (e.g. `300` for Ollama) | `90` |
+| `LLM_TIMEOUT` | Request timeout in seconds | `90` |
+| `DEFAULT_PROFILE` | Export target used when none is given | `celonis` |
+| `SINGLE_POOL` | `true` merges all roles into one pool with swimlanes (required for Celonis) | `true` |
 
----
+### Provider examples
 
-### Provider Examples
-
-#### 1. Ollama (Default — Fully Local & Offline)
 ```env
+# Ollama (local, offline)
 LLM_PROVIDER=ollama
-LLM_MODEL=llama3
+LLM_MODEL=llama3.1
 LLM_BASE_URL=http://localhost:11434/v1
 LLM_API_KEY=ollama
-LLM_AUTH_HEADER=Authorization
-LLM_CONTEXT_TOKENS=4096   # match Ollama's num_ctx, or start Ollama with OLLAMA_CONTEXT_LENGTH=8192
-LLM_TIMEOUT=300           # local models on CPU are slow; the default 90s is often too short
-```
 
-#### 2. OpenAI / OpenAI-Compatible (OpenAI, Groq, OpenRouter, vLLM)
-```env
+# OpenAI / Groq / OpenRouter / vLLM / LM Studio
 LLM_PROVIDER=openai_compatible
-LLM_MODEL=gpt-4o
+LLM_MODEL=gpt-4o-mini
 LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=sk-proj-your-api-key-here
-LLM_AUTH_HEADER=Authorization
-LLM_CONTEXT_TOKENS=16384
-```
+LLM_API_KEY=sk-...
 
-#### 3. Azure OpenAI
-```env
-LLM_PROVIDER=openai_compatible
+# Azure OpenAI
+LLM_PROVIDER=azure
 LLM_MODEL=gpt-4o
-LLM_BASE_URL=https://your-resource-name.openai.azure.com/openai/deployments/your-deployment-name/chat/completions?api-version=2024-02-15-preview
-LLM_API_KEY=your-azure-api-key
+LLM_BASE_URL=https://<resource>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=2024-10-21
+LLM_API_KEY=...
 LLM_AUTH_HEADER=api-key
-LLM_CONTEXT_TOKENS=16384
-```
 
-#### 4. Anthropic Claude
-```env
+# Anthropic Claude
 LLM_PROVIDER=anthropic
-LLM_MODEL=claude-3-5-sonnet-20241022
+LLM_MODEL=claude-sonnet-4-5
 LLM_BASE_URL=https://api.anthropic.com/v1
-LLM_API_KEY=sk-ant-your-anthropic-api-key
-LLM_AUTH_HEADER=x-api-key
-LLM_CONTEXT_TOKENS=16384
-```
+LLM_API_KEY=sk-ant-...
 
-#### 5. Google Gemini
-```env
+# Google Gemini
 LLM_PROVIDER=gemini
-LLM_MODEL=gemini-1.5-flash
+LLM_MODEL=gemini-2.5-flash
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta
-LLM_API_KEY=your-gemini-api-key
-LLM_AUTH_HEADER=x-goog-api-key
-LLM_CONTEXT_TOKENS=16384
-```
+LLM_API_KEY=...
 
-#### 6. Mock Provider (Zero Network / Offline Testing)
-```env
+# Mock (no model; pipeline and importer testing only)
 LLM_PROVIDER=mock
-LLM_MODEL=mock-model
-LLM_BASE_URL=http://mock
-LLM_API_KEY=mock
 ```
 
 ---
 
-## Single Pool Collaboration Mode (`SINGLE_POOL`)
+## Command Line
 
-- `SINGLE_POOL=true` *(Default)*: Consolidates all identified participant roles into swimlanes within a **single collaboration pool**. This is standard for enterprise BPMN modeling where internal actors interact within a single process scope.
-- `SINGLE_POOL=false`: Generates distinct participant pools for each role with message flows connecting across pool boundaries.
+```bash
+# Convert a document (Celonis is the default target)
+python3 -m backend.cli convert path/to/sop.docx -o converted/sop.bpmn
+
+# Generic BPMN 2.0 instead
+python3 -m backend.cli convert path/to/sop.docx -p generic -o converted/sop_generic.bpmn
+
+# Import a BPMN file from another tool and re-export for Celonis
+python3 -m backend.cli import path/to/camunda_export.bpmn -o converted/for_celonis.bpmn
+
+# Offline rule engine (no model)
+python3 -m backend.cli convert path/to/sop.md --mock -o converted/sop.bpmn
+
+# List export targets
+python3 -m backend.cli profiles
+```
+
+`convert` and `import` exit with code `2` when the diagram has ERROR-level issues; add `--force` to write the file anyway for inspection.
 
 ---
 
-## Process Capture Templates & Samples
+## Export gate
 
-- **Downloadable Capture Forms**:
-  - `Process_Capture_Template.xlsx` & `Process_Capture_Template_Example.xlsx`: Structured Excel workbooks with columns for Step #, Activity Name, Role / Swimlane, Step Type (Task, Decision, Event), Decision Target / Outcomes, and Description.
-  - `Process_Capture_Template.docx` & `Process_Capture_Template_Example.docx`: Formatted Word documents for Standard Operating Procedures.
-- **Sample Workflows**: Pre-loaded examples in `samples/` covering Leave Requests, Incident Resolution, Employee Onboarding, Customer Support Tickets, and Procurement Approvals.
-- **Interactive Step Builder**: Built-in visual table editor to capture process steps without leaving the browser and generate diagrams instantly.
+Conversion and import always return a diagram, but export (`/api/export/bpmn`, `/api/export/bulk`, the CLI) is refused while ERROR-level issues exist — unreachable steps, unlabelled decision branches, unbalanced parallel gateways, or template rows that conflict. Each exported file is XSD-validated before it is written. Fix the issues listed in the Inspector, or pass `--force` on the CLI.
 
 ---
 
-## Vendor Export Profiles
+## Deploying for a team
 
-Process2BPMN tailors XML namespaces and BPMNDI layout structures for major process modeling platforms:
-
-| Profile | Target System | Namespace / Attributes |
-| :--- | :--- | :--- |
-| **Generic** | Standard BPMN 2.0 | Standard OMG BPMN 2.0 (`http://www.omg.org/spec/BPMN/20100524/MODEL`) |
-| **Signavio** | SAP Signavio Process Manager | Signavio namespace extensions, `sid-*` ID prefixes, custom style tags |
-| **Camunda** | Camunda Platform 7 & 8 | Camunda namespace (`http://camunda.org/schema/1.0/bpmn`), execution properties |
-| **Celonis** | Celonis Process Mining / Execution | Process mining activity identifiers, clean flow routing |
-| **ARIS** | Software AG ARIS | Strict single-pool swimlane grouping, ARIS-compatible coordinates |
+`backend/security.py` provides `APP_AUTH_MODE=none|proxy|token`, per-user rate limiting and concurrency slots, an SSRF guard on client-supplied `base_url`, and `ALLOW_CLIENT_LLM_OVERRIDES` to lock the model to the server's `.env`. Put the app behind a reverse proxy with SSO and TLS, set `APP_AUTH_MODE=proxy`, restrict `LLM_BASE_URL_ALLOWLIST`, and keep `.env` on the server only. Uploaded reference templates are stored per user under `./data`.
 
 ---
 
 ## Troubleshooting
 
-| HTTP Status | Category | Root Cause & Resolution |
+| HTTP status | Category | Cause and fix |
 | :--- | :--- | :--- |
-| **`502 Bad Gateway`** | **LLM Connection / Auth** | • Verify `LLM_BASE_URL` is reachable from the server.<br>• Check `LLM_API_KEY` validity and permissions.<br>• For Azure OpenAI, confirm `LLM_AUTH_HEADER=api-key` and deployment name in the URL.<br>• For Ollama, verify that the Ollama daemon is running (`ollama serve`) and the model is pulled (`ollama pull llama3`). |
-| **`422 Unprocessable Entity`** | **Validation Failure** | • **XSD Validation Error**: The generated BPMN XML failed strict OMG BPMN 2.0 schema validation.<br>• **Template Row Error**: The uploaded Excel/Word table has conflicting sequence flows, invalid step numbers, or missing mandatory fields. |
-| **`400 Bad Request`** | **Ingestion Error** | • Uploaded file is empty (0 bytes).<br>• Unsupported file format or file extension / magic-bytes mismatch.<br>• Scanned PDF with no extractable text layer.<br>• Encrypted or password-protected document. |
+| `502` | Model connection / auth | `LLM_BASE_URL` unreachable, bad key, wrong `LLM_AUTH_HEADER` for Azure, Ollama not running or model not pulled. Use Settings → Test connection. |
+| `422` | Validation | Generated XML failed XSD validation, ERROR-level graph issues block export, or the capture form has conflicting rows. |
+| `415` | File signature | The extension does not match the file contents (e.g. a renamed `.bpm` or `.pdf`). Bizagi `.bpm` files must be exported to `.bpmn` first. |
+| `400` | Ingestion / import | Empty file, unsupported format, scanned PDF without a text layer, encrypted document, or a BPMN file with no `<bpmn:process>`. |
 
 ---
 
 ## Developer Commands
 
 ```bash
-# Run all tests (pytest + frontend lint)
-make test
-
-# Run frontend TypeScript & design system lint
-make lint
-
-# Compile frontend bundle & template artifacts
-make build
-
-# Fetch official OMG BPMN 2.0 XSD schemas
-make schemas
-
-# Regenerate template assets
-make templates
+make test        # pytest + frontend lint
+make lint        # TypeScript + design-system lint
+make build       # frontend bundle + template assets
+make schemas     # fetch official OMG BPMN 2.0 XSD schemas
+make templates   # regenerate the capture template files
 ```
+
+---
+
+## Roadmap (scope v2)
+
+Work is tracked on branch `scope-celonis-v2`.
+
+| Phase | Scope | Status |
+| :--- | :--- | :--- |
+| 0 | Branch + tag the full-scope build (`v1-full-scope`) | in progress |
+| 1 | Remove sample workflows, Step Builder, and the Signavio/Camunda/ARIS profiles | planned |
+| 2 | Celonis as default target everywhere; empty start page; two-target toolbar | planned |
+| 3 | Single Template page with one example process | planned |
+| 4 | BPMN import from other tools (`/api/import/bpmn`, CLI `import`) | planned |
+| 5 | Tech-stack slimming and test suite (Vitest + Playwright smoke) | planned |
+| 6 | Manual import verification: Celonis, bpmn.io, Bizagi, Flowable; round-trips from Camunda/Signavio/ARIS exports | planned |
+| 7 | Real-model (Ollama) extraction re-validation and team deployment | planned |
