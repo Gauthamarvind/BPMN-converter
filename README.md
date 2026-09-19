@@ -69,24 +69,65 @@ docker compose up -d
 
 ---
 
-## How the app works
+## Feature Matrix & Execution Requirements
+
+The table below outlines all available features in Process2BPMN, their execution methods, whether an LLM call is required, and the prerequisites to run them:
+
+| Feature / Task | Requires LLM? | Supported Input Formats | Execution Methods | Requirements / Prerequisites | Output Artifacts |
+| :--- | :---: | :--- | :--- | :--- | :--- |
+| **Unstructured Document Conversion** | **Yes** (or `--mock`) | `.docx`, `.pdf` (text layer), `.md`, `.txt`, `.csv`, `.json`, pasted text | • Web UI: drag & drop or paste text<br>• CLI: `backend.cli convert`<br>• API: `POST /api/convert` | Configured LLM provider (`gemini`, `openai_compatible`, `anthropic`, `azure`, or local `ollama`) in `.env`, or use `--mock` for offline testing | Standards-compliant BPMN 2.0 XML with auto-layout, roles mapped to swimlanes, decisions, and end events |
+| **Meeting & Interview Transcripts** | **Yes** (or `--mock`) | `.vtt`, `.srt`, transcript text | • Web UI: drop file or paste dialogue<br>• CLI: `backend.cli convert`<br>• API: `POST /api/convert` | Timestamp cues & speaker tags are automatically cleaned by parser; LLM or mock extracts sequence | Clean BPMN 2.0 diagram mapping conversational dialogue into chronological activities |
+| **Process Capture Template Conversion** | **No** (100% Rule Engine) | `.xlsx`, `.docx` structured capture forms (using standard column headers) | • Web UI: drop `.xlsx` / `.docx`<br>• CLI: `backend.cli convert`<br>• API: `POST /api/convert` | Form must follow standard headers (`Step ID`, `Step`, `Responsible`, `Type`, `If Yes`, `If No`, `Parallel Group`, `Next Step`). No LLM required | Clean BPMN 2.0 XML with swimlanes, XOR gateways, and AND fork/join blocks |
+| **Capture Form Row Diagnostics** | **No** (Deterministic) | `.xlsx`, `.docx`, `.csv`, `.json` capture tables | Built into parser on upload / CLI convert | None. Evaluates table contiguity, unhandled decision rows, duplicate IDs, and dangling next-steps | Detailed row-level error reports with row numbers and one-click fixes |
+| **BPMN Import from External Tools** | **No** (100% Deterministic) | `.bpmn`, `.xml` from Camunda 7/8, SAP Signavio, ARIS, Bizagi, Flowable, bpmn.io | • Web UI: drop `.bpmn` file<br>• CLI: `backend.cli import`<br>• API: `POST /api/import/bpmn` | Valid BPMN 2.0 XML exported from external tool. No LLM required | Normalized Celonis / Generic BPMN 2.0 with vendor extensions stripped and original coordinates preserved |
+| **Target Profile Re-rendering** | **No** (Zero LLM) | Existing in-memory process graph | • Web UI: toolbar target toggle<br>• API: `POST /api/render` | Extracted Process IR in session memory. Re-serializes directly from graph representation | Instantly switches between Celonis (single pool) and Generic BPMN 2.0 without re-calling model |
+| **Reference Template & Lane Mapping** | **No** (Zero LLM) | `.bpmn` reference diagram + role-to-lane map | • Web UI: Templates menu<br>• API: `POST /api/templates/map-lanes`<br>• CLI: `--template` | Custom reference BPMN file uploaded to server (`data/templates/`) | Diagram formatted into reference template's pools and corporate swimlanes |
+| **Sugiyama Auto-Layout & Cycle Breaking** | **No** (Deterministic) | Process IR graph | Built into conversion, render, and CLI import (`--relayout`) | None. Multi-lane Sugiyama engine breaks feedback cycles and routes return flows underneath lanes | Full BPMNDI diagram coordinates with clean, non-inverting horizontal flow |
+| **Graph Validation & Auto-Repair** | **No** (Deterministic) | Process IR graph | Built into conversion and import pipeline | None. Synthesizes missing start/end events, cleans self-loops, and flags errors | Validated process graph; reports blocking issues vs informational auto-repairs |
+| **Strict Export Gate Enforcement** | **No** (Deterministic) | Process IR + validation issues | • Web UI Export button<br>• CLI exit code 2<br>• API: `POST /api/export/*` | Process must be free of ERROR-level issues (e.g. unreachable tasks, unlabelled decisions). Override with `--force` | HTTP 422 if blocked; otherwise writes valid `.bpmn`, `.svg`, `.png`, or bulk `.zip` |
+| **OMG BPMN 2.0 XSD Schema Validation** | **No** (Deterministic) | Generated BPMN XML | Built into all export routes and CLI commands | Official OMG BPMN 2.0 XSD schemas in `backend/schemas/` | Validates generated XML against official OMG schemas before any file is saved |
+
+---
+
+## When is a Language Model Called?
+
+Understanding what requires a model call helps optimize costs, latency, and offline usage:
+
+> [!IMPORTANT]
+> **Operations that REQUIRE an LLM call:**
+> - Converting unstructured, free-form prose (SOP manuals, policy handbooks, emails, meeting transcripts) where process logic must be interpreted and structured from natural language.
+> - *Note*: You can completely bypass LLM calls for unstructured text during development or CI by passing `--mock` (CLI) or `mock=true` (API), which uses an offline deterministic rule engine.
+
+> [!TIP]
+> **Operations that NEVER call an LLM (100% Deterministic & Offline):**
+> 1. **Structured Process Capture Templates**: Uploading `.xlsx` or `.docx` forms downloaded from the Template menu.
+> 2. **BPMN Import from other tools**: Uploading `.bpmn` files from Camunda, Signavio, ARIS, Flowable, Bizagi, or bpmn.io.
+> 3. **Export Target Switching**: Toggling between **Celonis** and **Generic BPMN 2.0** in the toolbar (`POST /api/render`).
+> 4. **Reference Template Lane Mapping**: Binding process roles to standard enterprise lanes.
+> 5. **Re-layout, Graph Validation & Export**: Sugiyama layout calculation, cycle breaking, XSD schema verification, and diagram downloads (`.bpmn`, `.svg`, `.png`, `.zip`).
+
+---
+
+## How to Use: Execution Modes & Workflows
+
+### 1. Web Application (Interactive UI)
 
 The page opens empty — nothing is preloaded and no model is called until you convert something.
 
-### A. Convert a document or pasted text
-1. Drop a file on the canvas or into the left sidebar, or paste text.
+#### A. Convert a document or pasted text
+1. Drop a file (`.docx`, `.xlsx`, `.pdf`, `.csv`, `.md`, `.txt`, `.vtt`) onto the canvas or the left sidebar, or paste text.
 2. The target tool is **Celonis** by default. Switch to **Generic BPMN 2.0** in the toolbar if you need a plain OMG file.
-3. Click **Convert**.
+3. Click **Convert Process**.
 4. Review the diagram; click any element to see its details and the source sentence it came from. The **Issues** tab lists warnings and anything that blocks export.
-5. **Export** as `.bpmn`, `.svg`, `.png`, or a ZIP containing both the Celonis and generic `.bpmn` files.
+5. **Export** as `.bpmn`, `.svg`, `.png`, or a ZIP containing both Celonis and generic `.bpmn` files.
 
-### B. Import a BPMN file from another tool
-1. Drop a `.bpmn` / `.xml` exported from Camunda, Signavio, ARIS, Bizagi, Flowable or bpmn.io onto the canvas or the sidebar — the same dropzone as any other file. BPMN files are routed to the importer automatically.
-2. The importer detects the source tool, removes vendor namespaces and extension elements, validates the graph and shows the diagram. What it stripped, approximated or dropped is listed under **Issues**. No model is called.
+#### B. Import a BPMN file from another tool (Zero LLM)
+1. Drop a `.bpmn` / `.xml` exported from Camunda, Signavio, ARIS, Bizagi, Flowable or bpmn.io onto the canvas or the sidebar. BPMN files are routed to the importer automatically.
+2. The importer detects the source tool, removes vendor namespaces and extension elements, validates the graph, and renders the diagram. What it stripped, approximated, or dropped is listed under **Issues**. No model is called.
 3. The diagram keeps the coordinates the source file carried. Click **Re-layout** on the status pill to replace them with a clean automatic layout.
 4. Export as Celonis or generic BPMN 2.0 exactly as in flow A.
 
-How to get a BPMN 2.0 file out of each tool:
+How to get a clean BPMN 2.0 export out of each tool:
 
 | Source tool | Export action | Notes |
 | :--- | :--- | :--- |
@@ -97,15 +138,71 @@ How to get a BPMN 2.0 file out of each tool:
 | Flowable | Export → BPMN 2.0 XML | `flowable:` extensions are dropped. |
 | bpmn.io / other | Download `.bpmn` | Imported as-is. |
 
-### C. Use the process capture template (no model needed)
+#### C. Use the process capture template (Zero LLM)
 1. Open **Template** in the toolbar. One page shows the capture form and one filled-in example process.
-2. Download the blank Excel (or Word) form, fill it in, and upload it like any other file.
+2. Download the blank Excel (or Word) form, fill it in with your steps, and upload it like any other file.
 3. The rows are converted by rules and any row problems are reported with the row number.
 
-### D. Reuse your own reference diagram
+#### D. Reuse your own reference diagram (Zero LLM)
 1. **Templates → Upload** a `.bpmn` reference diagram from Celonis or a generic tool.
 2. Select it in the toolbar and, if needed, open **Lane mapping** to match your roles to its lanes.
-3. Convert or re-render; the export uses the template's pools, lanes and namespaces.
+3. Convert or re-render; the export uses the template's pools, lanes, and namespaces.
+
+---
+
+### 2. Command Line Interface (CLI)
+
+The CLI provides full functionality for headless conversions, batch jobs, and CI/CD pipelines:
+
+```bash
+# A. Convert an SOP document using Celonis as the default export target
+python3 -m backend.cli convert path/to/sop.docx -o converted/sop_celonis.bpmn
+
+# B. Convert to Generic OMG BPMN 2.0 target
+python3 -m backend.cli convert path/to/sop.docx -p generic -o converted/sop_generic.bpmn
+
+# C. Convert offline using the deterministic rule engine (no LLM required)
+python3 -m backend.cli convert path/to/sop.md --mock -o converted/sop_mock.bpmn
+
+# D. Convert a structured Process Capture Excel form (zero LLM)
+python3 -m backend.cli convert templates/Process_Capture_Template_Example.xlsx -o converted/capture.bpmn
+
+# E. Import a foreign BPMN file (Camunda, Flowable, Signavio) and re-export for Celonis
+python3 -m backend.cli import path/to/camunda_export.bpmn -o converted/celonis_ready.bpmn
+
+# F. Import foreign BPMN and re-compute layout from scratch
+python3 -m backend.cli import path/to/camunda_export.bpmn --relayout -o converted/celonis_relayout.bpmn
+
+# G. Force export even when diagram has blocking ERROR-level validation issues
+python3 -m backend.cli convert path/to/sop.txt --mock --force -o converted/inspection_only.bpmn
+
+# H. List all available export profiles
+python3 -m backend.cli profiles
+```
+
+*Exit Codes*:
+- `0`: Success (file validated against OMG XSD and written).
+- `2`: Export blocked due to ERROR-level graph issues (unreachable steps, unlabelled decisions). Override with `--force`.
+- `1`: Ingestion error, file not found, or LLM connection failure.
+
+---
+
+### 3. REST API Endpoints
+
+All core capabilities are exposed via REST API for custom integrations:
+
+| Endpoint | Method | Requires LLM? | Description |
+| :--- | :---: | :---: | :--- |
+| `/api/convert` | `POST` | Yes (or `mock=true`) | Ingest document (`multipart/form-data`) and return BPMN XML, Process IR, and validation issues |
+| `/api/import/bpmn` | `POST` | **No** | Ingest foreign BPMN XML; returns sanitized BPMN XML, Process IR, and stripped extension report |
+| `/api/render` | `POST` | **No** | Re-render existing Process IR to a different profile (`celonis` or `generic`) or reference template |
+| `/api/templates` | `GET`, `POST` | **No** | List uploaded reference templates or upload a new corporate BPMN reference diagram |
+| `/api/templates/map-lanes` | `POST` | **No** | Map extracted process actors to reference template lane IDs |
+| `/api/templates/download-blank` | `GET` | **No** | Download blank Excel/Word capture forms or example templates (`type=xlsx\|docx&sample=true\|false`) |
+| `/api/export/bpmn` | `POST` | **No** | Export BPMN XML with strict validation (returns 422 if blocking errors exist) |
+| `/api/export/bulk` | `POST` | **No** | Download multi-target ZIP bundle containing Celonis and Generic BPMN XML plus SVG diagrams |
+| `/api/health` | `GET` | **No** | Service health status, active provider, and server configuration |
+| `/api/llm/ping` | `POST` | Optional | Test connection latency and credential validity for configured or client-supplied LLM endpoint |
 
 ---
 
@@ -183,32 +280,6 @@ LLM_API_KEY=...
 # Mock (no model; pipeline and importer testing only)
 LLM_PROVIDER=mock
 ```
-
----
-
-## Command Line
-
-```bash
-# Convert a document (Celonis is the default target)
-python3 -m backend.cli convert path/to/sop.docx -o converted/sop.bpmn
-
-# Generic BPMN 2.0 instead
-python3 -m backend.cli convert path/to/sop.docx -p generic -o converted/sop_generic.bpmn
-
-# Import a BPMN file from another tool and re-export for Celonis
-python3 -m backend.cli import path/to/camunda_export.bpmn -o converted/for_celonis.bpmn
-
-# Same, but discard the source coordinates and lay the diagram out from scratch
-python3 -m backend.cli import path/to/camunda_export.bpmn --relayout -o converted/for_celonis.bpmn
-
-# Offline rule engine (no model)
-python3 -m backend.cli convert path/to/sop.md --mock -o converted/sop.bpmn
-
-# List export targets
-python3 -m backend.cli profiles
-```
-
-`convert` and `import` exit with code `2` when the diagram has ERROR-level issues; add `--force` to write the file anyway for inspection.
 
 ---
 
