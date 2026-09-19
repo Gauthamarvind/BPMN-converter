@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_Enterprise_Standard"
+                  targetNamespace="http://enterprise.acme.com/bpmn"
+                  exporter="Enterprise Architecture Tool"
+                  exporterVersion="2.0">
+  <bpmn:collaboration id="Collaboration_Enterprise">
+    <bpmn:participant id="Participant_Enterprise" name="Global Operations" processRef="Process_Enterprise"/>
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Enterprise" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Enterprise">
+      <bpmn:lane id="Lane_Risk" name="Risk and Compliance"/>
+      <bpmn:lane id="Lane_Ops" name="Operations and Logistics"/>
+      <bpmn:lane id="Lane_Fin" name="Finance and Treasury"/>
+    </bpmn:laneSet>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Enterprise">
+    <bpmndi:BPMNPlane id="BPMNPlane_Enterprise" bpmnElement="Collaboration_Enterprise">
+      <bpmndi:BPMNShape id="Shape_Participant_Enterprise" bpmnElement="Participant_Enterprise" isHorizontal="true">
+        <dc:Bounds x="100" y="80" width="1200" height="540"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Risk" bpmnElement="Lane_Risk" isHorizontal="true">
+        <dc:Bounds x="130" y="80" width="1170" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Ops" bpmnElement="Lane_Ops" isHorizontal="true">
+        <dc:Bounds x="130" y="260" width="1170" height="180"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Fin" bpmnElement="Lane_Fin" isHorizontal="true">
+        <dc:Bounds x="130" y="440" width="1170" height="180"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

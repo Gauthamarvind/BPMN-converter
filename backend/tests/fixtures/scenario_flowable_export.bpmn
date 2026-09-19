@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:flowable="http://flowable.org/bpmn"
+                  id="Definitions_Flowable_Loan"
+                  targetNamespace="http://flowable.org/bpmn20"
+                  exporter="Flowable Open Source"
+                  exporterVersion="6.8.0">
+  <bpmn:collaboration id="Collaboration_LoanApproval">
+    <bpmn:participant id="Participant_LoanProcess" name="Loan Underwriting Process" processRef="Process_LoanApproval" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_LoanApproval" name="Loan Approval Flow" isExecutable="true">
+    <bpmn:laneSet id="LaneSet_Loan">
+      <bpmn:lane id="Lane_Officer" name="Loan Officer">
+        <bpmn:flowNodeRef>StartEvent_LoanRequest</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReviewApplication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_CreditDecision</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Underwriter" name="Senior Underwriter">
+        <bpmn:flowNodeRef>Task_ManualAudit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DisburseFunds</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_Approved</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_Rejected</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="StartEvent_LoanRequest" name="Application Received">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:userTask id="Task_ReviewApplication" name="Review Application" flowable:assignee="officer1" flowable:candidateGroups="credit_dept">
+      <bpmn:extensionElements>
+        <flowable:formProperty id="creditScore" name="Credit Score" type="long" required="true" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_CreditDecision" name="Risk Score OK?">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_Approved</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Audit</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:userTask id="Task_ManualAudit" name="Conduct Detailed Audit" flowable:assignee="underwriter_lead">
+      <bpmn:incoming>Flow_Audit</bpmn:incoming>
+      <bpmn:outgoing>Flow_AuditEnd</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:serviceTask id="Task_DisburseFunds" name="Disburse Funds via Core Banking" flowable:class="org.flowable.DisburseDelegate">
+      <bpmn:incoming>Flow_Approved</bpmn:incoming>
+      <bpmn:outgoing>Flow_DisburseEnd</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndEvent_Approved" name="Loan Disbursed">
+      <bpmn:incoming>Flow_DisburseEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="EndEvent_Rejected" name="Loan Rejected">
+      <bpmn:incoming>Flow_AuditEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_LoanRequest" targetRef="Task_ReviewApplication" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_ReviewApplication" targetRef="Gateway_CreditDecision" />
+    <bpmn:sequenceFlow id="Flow_Approved" name="Low Risk" sourceRef="Gateway_CreditDecision" targetRef="Task_DisburseFunds">
+      <bpmn:conditionExpression>${creditScore >= 700}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Audit" name="High Risk" sourceRef="Gateway_CreditDecision" targetRef="Task_ManualAudit">
+      <bpmn:conditionExpression>${creditScore &lt; 700}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_AuditEnd" sourceRef="Task_ManualAudit" targetRef="EndEvent_Rejected" />
+    <bpmn:sequenceFlow id="Flow_DisburseEnd" sourceRef="Task_DisburseFunds" targetRef="EndEvent_Approved" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Loan">
+    <bpmndi:BPMNPlane id="BPMNPlane_Loan" bpmnElement="Collaboration_LoanApproval">
+      <bpmndi:BPMNShape id="Shape_Participant" bpmnElement="Participant_LoanProcess" isHorizontal="true">
+        <dc:Bounds x="100" y="50" width="800" height="300" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Officer" bpmnElement="Lane_Officer" isHorizontal="true">
+        <dc:Bounds x="130" y="50" width="770" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Underwriter" bpmnElement="Lane_Underwriter" isHorizontal="true">
+        <dc:Bounds x="130" y="200" width="770" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Start" bpmnElement="StartEvent_LoanRequest">
+        <dc:Bounds x="160" y="100" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Review" bpmnElement="Task_ReviewApplication">
+        <dc:Bounds x="240" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Gateway" bpmnElement="Gateway_CreditDecision" isMarkerVisible="true">
+        <dc:Bounds x="380" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Audit" bpmnElement="Task_ManualAudit">
+        <dc:Bounds x="480" y="230" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Disburse" bpmnElement="Task_DisburseFunds">
+        <dc:Bounds x="480" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_Approved" bpmnElement="EndEvent_Approved">
+        <dc:Bounds x="640" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_Rejected" bpmnElement="EndEvent_Rejected">
+        <dc:Bounds x="640" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_Flow_1" bpmnElement="Flow_1">
+        <di:waypoint x="196" y="118" />
+        <di:waypoint x="240" y="118" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_2" bpmnElement="Flow_2">
+        <di:waypoint x="340" y="120" />
+        <di:waypoint x="380" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Approved" bpmnElement="Flow_Approved">
+        <di:waypoint x="430" y="120" />
+        <di:waypoint x="480" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Audit" bpmnElement="Flow_Audit">
+        <di:waypoint x="405" y="145" />
+        <di:waypoint x="405" y="270" />
+        <di:waypoint x="480" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_DisburseEnd" bpmnElement="Flow_DisburseEnd">
+        <di:waypoint x="580" y="120" />
+        <di:waypoint x="640" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_AuditEnd" bpmnElement="Flow_AuditEnd">
+        <di:waypoint x="580" y="270" />
+        <di:waypoint x="640" y="270" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

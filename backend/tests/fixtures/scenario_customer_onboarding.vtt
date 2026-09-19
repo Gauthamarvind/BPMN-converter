@@ -1,0 +1,25 @@
+WEBVTT - Customer Onboarding Process Interview
+
+00:00:01.000 --> 00:00:04.500
+<v Interviewer> Can you walk me through what happens when a new enterprise client signs up?
+
+00:00:05.000 --> 00:00:10.200
+<v Onboarding Specialist> First, the Onboarding Specialist receives the signed service agreement from the client.
+
+00:00:11.000 --> 00:00:16.800
+<v Onboarding Specialist> Then, the Compliance Officer verifies identity documents and conducts anti-money laundering checks.
+
+00:00:17.500 --> 00:00:23.000
+<v Interviewer> What if compliance discovers issues with the documentation?
+
+00:00:24.000 --> 00:00:30.000
+<v Onboarding Specialist> If documents are missing or invalid, the Compliance Officer requests clarifying documents from the client.
+
+00:00:31.000 --> 00:00:37.000
+<v Onboarding Specialist> If compliance checks pass, the Systems Administrator provisions the cloud tenant and configures user roles.
+
+00:00:38.000 --> 00:00:44.500
+<v Onboarding Specialist> Next, the Customer Success Manager schedules the kickoff training session with the client team.
+
+00:00:45.000 --> 00:00:50.000
+<v Onboarding Specialist> Finally, the Customer Success Manager activates the account and marks onboarding complete.
