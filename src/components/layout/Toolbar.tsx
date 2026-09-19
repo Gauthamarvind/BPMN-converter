@@ -54,12 +54,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
-  // Profile options for SegmentedControl
-  // Short labels keep the control readable; the full vendor name is in the tooltip.
-  const profileOptions: SegmentedOption[] = profiles.map((p) => ({
-    id: p.id,
-    label: p.shortName || p.displayName || p.name,
-  }));
+  // Export target options for SegmentedControl.
+  // Short labels keep the control readable; the full name is in the tooltip.
+  // Celonis is the default target and is always shown first.
+  const TARGET_ORDER = ['celonis', 'generic'];
+  const profileOptions: SegmentedOption[] = [...profiles]
+    .sort((a, b) => {
+      const ai = TARGET_ORDER.indexOf(a.id);
+      const bi = TARGET_ORDER.indexOf(b.id);
+      return (ai === -1 ? TARGET_ORDER.length : ai) - (bi === -1 ? TARGET_ORDER.length : bi);
+    })
+    .map((p) => ({
+      id: p.id,
+      label: p.shortName || p.displayName || p.name,
+    }));
 
   const modelDot = {
     ready: 'bg-[var(--success)]',
@@ -89,7 +97,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       {profileOptions.length > 0 && (
         <div
           className="hidden md:flex items-center"
-          title={profiles.find((p) => p.id === selectedProfileId)?.displayName || 'Target tool'}
+          title={profiles.find((p) => p.id === selectedProfileId)?.displayName || 'Export target'}
         >
           <SegmentedControl
             id="toolbar-profile-selector"

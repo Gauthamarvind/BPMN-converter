@@ -23,6 +23,7 @@ from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import validate_bpmn, BpmnSchemaError
 from backend.pipeline.linter import ProfileLinter
+from backend.pipeline.profiles import DEFAULT_PROFILE, SUPPORTED_PROFILES
 from backend.pipeline.mock_extractor import generate_mock_ir_from_text
 from backend.templates.storage import TemplateStorage
 from backend.templates.doc_parser import DocTemplateParser
@@ -52,7 +53,7 @@ class ExportBlockedError(Exception):
 def process_pipeline(
     raw_content: bytes,
     filename: str,
-    profile_name: str = "generic",
+    profile_name: str = DEFAULT_PROFILE,
     mock: bool = False,
     provider_name: Optional[str] = None,
     model: Optional[str] = None,
@@ -69,7 +70,7 @@ def process_pipeline(
     Args:
         raw_content: Input file or text bytes.
         filename: Name of the input document (determines parser & title).
-        profile_name: Target export profile ('celonis' or 'generic').
+        profile_name: Target export profile ('celonis' — the default — or 'generic').
         mock: When True, uses deterministic rule-based mock extraction without calling LLM.
         provider_name: LLM provider override ('openai_compatible', 'anthropic', 'gemini').
         model: LLM model name override.
@@ -168,7 +169,7 @@ def process_pipeline(
 def render_ir(
     ir: ProcessIR,
     filename: str = "process.bpmn",
-    profile_name: str = "generic",
+    profile_name: str = DEFAULT_PROFILE,
     mock: bool = False,
     template_id: Optional[str] = None,
     lane_map: Optional[Dict[str, str]] = None,
@@ -277,7 +278,7 @@ def render_ir(
         )
 
     # 8. Multi-Profile Bulk Export Metadata
-    supported_profiles = ["celonis", "generic"]
+    supported_profiles = list(SUPPORTED_PROFILES)
     bulk_export = {
         "process_name": repaired_ir.name or Path(filename).stem,
         "supported_profiles": supported_profiles,

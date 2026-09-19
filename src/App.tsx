@@ -37,6 +37,9 @@ class HandledApiError extends Error {
 
 const SETTINGS_STORAGE_KEY = 'process2bpmn.settings.v1';
 
+/** Scope v2 default export target. The backend defaults to the same profile. */
+const DEFAULT_PROFILE_ID = 'celonis';
+
 function loadStoredSettings(): LLMSettings {
   const fallback: LLMSettings = { provider: '', model: '', baseUrl: '', apiKey: '', temperature: 0.1 };
   try {
@@ -58,7 +61,7 @@ export default function App() {
   const [filename, setFilename] = useState<string>('process_input.txt');
   const [fileSize, setFileSize] = useState<number | undefined>(undefined);
   const [profiles, setProfiles] = useState<ProfileMetadata[]>([]);
-  const [selectedProfileId, setSelectedProfileId] = useState<string>('celonis');
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(DEFAULT_PROFILE_ID);
   const [loading, setLoading] = useState<boolean>(false);
   const [sidebarError, setSidebarError] = useState<UiError | null>(null);
   const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
@@ -145,6 +148,10 @@ export default function App() {
       .then((data) => {
         if (data.profiles && data.profiles.length > 0) {
           setProfiles(data.profiles);
+          // Fall back to the first target the server offers if the default is not among them.
+          if (!data.profiles.some((p: ProfileMetadata) => p.id === DEFAULT_PROFILE_ID)) {
+            setSelectedProfileId(data.profiles[0].id);
+          }
         }
       })
       .catch((err) => console.error('Failed to load profiles:', err));

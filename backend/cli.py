@@ -3,7 +3,7 @@
 Process2BPMN Standalone CLI.
 Converts unstructured process documents into BPMN 2.0 XML with full BPMNDI auto-layout.
 Usage:
-  process2bpmn convert input.docx --profile celonis -o out.bpmn
+  process2bpmn convert input.docx -o out.bpmn                      # Celonis (default)
   python3 -m backend.cli convert input.docx --profile generic -o out.bpmn
 """
 
@@ -23,6 +23,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from backend.ir.models import ProcessIR
 from backend.config import config
+from backend.pipeline.profiles import DEFAULT_PROFILE, SUPPORTED_PROFILES
 
 
 from backend.pipeline.mock_extractor import generate_mock_ir_from_text  # re-exported for backwards compatibility
@@ -54,7 +55,7 @@ def _resolve_template_id(template: Optional[str], mock: bool) -> Optional[str]:
 def convert_file(
     input_path: str,
     output_path: Optional[str] = None,
-    profile_name: str = "generic",
+    profile_name: str = DEFAULT_PROFILE,
     mock: bool = False,
     provider_name: Optional[str] = None,
     model: Optional[str] = None,
@@ -138,9 +139,9 @@ def main():
     convert_parser.add_argument("input", help="Path to input file (.txt, .md, .csv, .docx, .pdf, .xlsx, .vtt, .srt)")
     convert_parser.add_argument(
         "--profile", "-p",
-        default="generic",
-        choices=["celonis", "generic"],
-        help="Target tool profile (default: generic)"
+        default=DEFAULT_PROFILE,
+        choices=list(SUPPORTED_PROFILES),
+        help=f"Target export profile (default: {DEFAULT_PROFILE})"
     )
     convert_parser.add_argument("--output", "-o", help="Output .bpmn file path (default: stdout)")
     convert_parser.add_argument("--mock", action="store_true", default=False, help="Force offline deterministic extraction")

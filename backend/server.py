@@ -49,6 +49,7 @@ from backend.pipeline.layout import SugiyamaLayoutEngine
 from backend.pipeline.serializer import BpmnXmlSerializer
 from backend.pipeline.xsd_validator import BpmnSchemaError, BpmnSchemaConfigurationError
 from backend.pipeline.linter import ProfileLinter
+from backend.pipeline.profiles import DEFAULT_PROFILE, SUPPORTED_PROFILES
 from backend.pipeline.process_pipeline import process_pipeline, render_ir, ExportBlockedError
 from backend.pipeline.xsd_validator import validate_bpmn
 from backend.security import (
@@ -255,7 +256,7 @@ async def value_error_handler(request: Request, exc: ValueError):
 class ConvertTextRequest(BaseModel):
     text: str
     filename: Optional[str] = "process_input.txt"
-    profile: Optional[str] = "generic"
+    profile: Optional[str] = DEFAULT_PROFILE
     provider: Optional[str] = None
     model: Optional[str] = None
     base_url: Optional[str] = None
@@ -273,12 +274,12 @@ class MapLanesRequest(BaseModel):
 
 class LintRequest(BaseModel):
     ir: Optional[Dict[str, Any]] = None
-    profile: str = "generic"
+    profile: str = DEFAULT_PROFILE
 
 
 class RenderRequest(BaseModel):
     ir: Dict[str, Any]
-    profile: str = "generic"
+    profile: str = DEFAULT_PROFILE
     template_id: Optional[str] = None
     lane_map: Optional[Dict[str, str]] = None
     filename: str = "process.bpmn"
@@ -297,7 +298,7 @@ class BulkExportRequest(BaseModel):
 
 class BpmnExportRequest(BaseModel):
     ir: Dict[str, Any]
-    profile: str = "generic"
+    profile: str = DEFAULT_PROFILE
     template_id: Optional[str] = None
     lane_map: Optional[Dict[str, str]] = None
     process_name: Optional[str] = "process"
@@ -454,7 +455,9 @@ def render_from_ir(req: RenderRequest, request: Request):
 @app.get("/api/profiles")
 def get_profiles():
     profiles_data = []
-    for p_id in linter.list_available_profiles():
+    available = set(linter.list_available_profiles())
+    ordered = [p for p in SUPPORTED_PROFILES if p in available]
+    for p_id in ordered:
         prof = linter.load_profile(p_id)
         profiles_data.append({
             "id": p_id,
@@ -619,7 +622,7 @@ async def convert_document(
     file: Optional[UploadFile] = File(None),
     text: Optional[str] = Form(None),
     filename: Optional[str] = Form("process_input.txt"),
-    profile: Optional[str] = Form("generic"),
+    profile: Optional[str] = Form(DEFAULT_PROFILE),
     mock: Optional[bool] = Form(False),
     provider: Optional[str] = Form(None),
     model: Optional[str] = Form(None),
@@ -676,7 +679,7 @@ async def convert_document(
         _convert_guarded,
         raw_content=raw_content,
         filename=fname,
-        profile_name=profile or "generic",
+        profile_name=profile or DEFAULT_PROFILE,
         mock=mock or False,
         provider_name=p_name,
         model=p_model,
@@ -697,7 +700,7 @@ def convert_json_payload(req: ConvertTextRequest, request: Request):
     return _convert_guarded(
         raw_content=raw_content,
         filename=Path(req.filename or "process_input.txt").name,
-        profile_name=req.profile or "generic",
+        profile_name=req.profile or DEFAULT_PROFILE,
         mock=req.mock or False,
         provider_name=p_name,
         model=p_model,
@@ -726,9 +729,6 @@ def lint_process(req: LintRequest):
             for w in res.warnings
         ]
     }
-
-
-SUPPORTED_PROFILES = ["celonis", "generic"]
 
 
 def _serialize_profiles(ir_data: Dict[str, Any], profiles: List[str], template_id: Optional[str],
