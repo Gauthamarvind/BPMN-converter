@@ -5,8 +5,6 @@ import React, {
   useImperativeHandle,
   forwardRef,
 } from 'react';
-// @ts-ignore
-import BpmnViewer from 'bpmn-js/dist/bpmn-navigated-viewer.production.min.js';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
 import { saveAs } from 'file-saver';
@@ -137,6 +135,9 @@ export const BpmnViewerComponent = forwardRef<BpmnViewerHandle, BpmnViewerProps>
   ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewerRef = useRef<any>(null);
+    // Flips to true once the lazily loaded bpmn-js viewer is constructed, so the XML and
+    // highlight effects below re-run for content that arrived before the library did.
+    const [viewerReady, setViewerReady] = useState(false);
     const reportError = (title: string, err: unknown) => {
       console.error(title, err);
       onExportError?.(title, err instanceof Error ? err.message : String(err));
@@ -238,40 +239,55 @@ export const BpmnViewerComponent = forwardRef<BpmnViewerHandle, BpmnViewerProps>
       },
     }));
 
-    // Initialize bpmn-js
+    // Initialize bpmn-js. The library is imported dynamically so the bundler emits it as a
+    // separate chunk (~600 kB) instead of inlining it into the main bundle.
     useEffect(() => {
       if (!containerRef.current) return;
+      let cancelled = false;
 
       if (viewerRef.current) {
         viewerRef.current.destroy();
         viewerRef.current = null;
+        setViewerReady(false);
       }
 
-      const viewer = new BpmnViewer({
-        container: containerRef.current,
-      });
+      // @ts-ignore - the production bundle ships without type declarations
+      import('bpmn-js/dist/bpmn-navigated-viewer.production.min.js')
+        .then(({ default: BpmnViewer }) => {
+          if (cancelled || !containerRef.current) return;
 
-      viewerRef.current = viewer;
+          const viewer = new BpmnViewer({
+            container: containerRef.current,
+          });
+          viewerRef.current = viewer;
 
-      const eventBus = viewer.get('eventBus');
-      eventBus.on('element.click', (event: any) => {
-        const element = event.element;
-        if (element && element.id && onSelectElement) {
-          onSelectElement(element.id);
-        }
-      });
+          const eventBus = viewer.get('eventBus');
+          eventBus.on('element.click', (event: any) => {
+            const element = event.element;
+            if (element && element.id && onSelectElement) {
+              onSelectElement(element.id);
+            }
+          });
+
+          setViewerReady(true);
+        })
+        .catch((err) => {
+          console.error('Failed to load the BPMN viewer library:', err);
+        });
 
       return () => {
+        cancelled = true;
         if (viewerRef.current) {
           viewerRef.current.destroy();
           viewerRef.current = null;
         }
+        setViewerReady(false);
       };
     }, []);
 
-    // Render XML on changes
+    // Render XML on changes (and once the viewer becomes available)
     useEffect(() => {
-      if (!viewerRef.current || !xml) return;
+      if (!viewerReady || !viewerRef.current || !xml) return;
 
       viewerRef.current
         .importXML(xml)
@@ -282,11 +298,11 @@ export const BpmnViewerComponent = forwardRef<BpmnViewerHandle, BpmnViewerProps>
         .catch((err: any) => {
           console.error('Error rendering BPMN XML:', err);
         });
-    }, [xml]);
+    }, [xml, viewerReady]);
 
     // Handle selected element highlight
     useEffect(() => {
-      if (!viewerRef.current || !xml) return;
+      if (!viewerReady || !viewerRef.current || !xml) return;
       try {
         const canvas = viewerRef.current.get('canvas');
         const elementRegistry = viewerRef.current.get('elementRegistry');
@@ -301,7 +317,7 @@ export const BpmnViewerComponent = forwardRef<BpmnViewerHandle, BpmnViewerProps>
       } catch (e) {
         // Element not in current view
       }
-    }, [selectedElementId, xml]);
+    }, [selectedElementId, xml, viewerReady]);
 
     return (
       <div

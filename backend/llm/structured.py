@@ -16,6 +16,9 @@ from backend.ir.models import ProcessIR
 from backend.llm.base import LLMProvider
 from backend.llm.errors import LLMValidationError
 
+# Computed once; passed to adapters so they can switch the server into JSON mode.
+_PROCESS_IR_SCHEMA: Dict[str, Any] = ProcessIR.model_json_schema()
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,6 +112,7 @@ def extract_with_self_healing(
 
         parsed_json, raw_text, usage = provider.complete(
             messages=messages,
+            json_schema=_PROCESS_IR_SCHEMA,
             temperature=temperature,
             max_tokens=max_tokens
         )

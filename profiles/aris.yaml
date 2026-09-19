@@ -2,7 +2,8 @@
 # Assumptions:
 # - ARIS process models strictly map BPMN swimlanes to organizational units.
 # - ARIS requires strict NCName identifiers starting with a letter or underscore.
-# - ARIS expects conditions inside conditionExpression formal expressions.
+# - ARIS shows a sequence flow's *name* as the connection label; a conditionExpression alone is
+#   imported but not displayed, so conditions are written to both (conditionLocation: both).
 # - ARIS importer rejects vendor-specific non-standard attributes unless mapped.
 # - Max label length of 100 characters recommended for ARIS symbol sizing.
 
@@ -13,7 +14,7 @@ description: "Optimized for Software AG ARIS EPC/BPMN 2.0 importer with organiza
 
 forceCollaboration: true
 maxLabelLength: 100
-conditionLocation: "conditionExpression"
+conditionLocation: "both"  # name + conditionExpression: ARIS labels flows from the name attribute
 idFormatPattern: "^[a-zA-Z_][a-zA-Z0-9_.-]*$"
 
 allowedElementTypes:
@@ -32,10 +33,15 @@ allowedElementTypes:
   - inclusiveGateway
   - subProcess
 
+# Deliberately empty. ARIS imports plain OMG BPMN 2.0 and ignores foreign namespaces; declaring a
+# vendor namespace here would only add an unused xmlns attribute. Add one only if a specific
+# ARIS extension attribute is actually emitted by the serializer.
 extensionNamespaces: {}
 
 assumptions:
   - "ARIS maps lane definitions to organizational units."
   - "Every task inside a lane must have explicit lane membership via flowNodeRef."
   - "Gateways with multiple outgoing flows must specify clear condition expressions."
+  - "Condition text is written to the flow name as well, because ARIS labels connections from it."
+  - "callActivity is not exported: ARIS resolves process references via its own repository links."
   - "Disallows exotic boundary events in standard analytic view."

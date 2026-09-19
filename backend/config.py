@@ -27,6 +27,9 @@ class LLMConfig:
     context_tokens: int = int(os.getenv("LLM_CONTEXT_TOKENS", "8192"))
     max_output_tokens: int = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "4096"))
     temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.1"))
+    # Seconds to wait for one completion. Local models (Ollama on CPU) can need far more than
+    # the old hard-coded 90s to emit a 4k-token JSON document.
+    timeout: float = float(os.getenv("LLM_TIMEOUT", "90"))
 
 
 @dataclass

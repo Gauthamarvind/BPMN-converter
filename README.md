@@ -146,6 +146,7 @@ Process2BPMN is fully vendor-agnostic and configured via environment variables. 
 | `LLM_CONTEXT_TOKENS` | Token window size for intelligent chunking | `8192` |
 | `LLM_MAX_OUTPUT_TOKENS`| Maximum output tokens per generation request | `4096` |
 | `LLM_TEMPERATURE` | Generation temperature | `0.1` |
+| `LLM_TIMEOUT` | Seconds to wait for one model response. Raise for local models on CPU (e.g. `300` for Ollama) | `90` |
 
 ---
 
@@ -158,7 +159,8 @@ LLM_MODEL=llama3
 LLM_BASE_URL=http://localhost:11434/v1
 LLM_API_KEY=ollama
 LLM_AUTH_HEADER=Authorization
-LLM_CONTEXT_TOKENS=8192
+LLM_CONTEXT_TOKENS=4096   # match Ollama's num_ctx, or start Ollama with OLLAMA_CONTEXT_LENGTH=8192
+LLM_TIMEOUT=300           # local models on CPU are slow; the default 90s is often too short
 ```
 
 #### 2. OpenAI / OpenAI-Compatible (OpenAI, Groq, OpenRouter, vLLM)
